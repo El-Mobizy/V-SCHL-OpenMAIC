@@ -18,8 +18,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { useRole } from '@/lib/hooks/use-role';
 import type { ProviderId } from '@/lib/ai/providers';
 import type { ProvidersConfig } from '@/lib/types/settings';
+import type { AvailableProvider } from '@/lib/types/school';
 import { formatContextWindow } from './utils';
 
 interface ModelSelectorProps {
@@ -44,6 +46,18 @@ export function ModelSelector({
   const [testingModelId, setTestingModelId] = useState<string | null>(null);
   const selectedModelRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const { isStudent } = useRole();
+  const [availableProviders, setAvailableProviders] = useState<AvailableProvider[]>([]);
+
+  useEffect(() => {
+    if (isStudent) {
+      fetch('/api/providers')
+        .then((r) => r.json())
+        .then(setAvailableProviders)
+        .catch(() => {});
+    }
+  }, [isStudent]);
 
   // Helper function to get translated provider name
   const getProviderDisplayName = (pid: ProviderId, name: string) => {
@@ -82,12 +96,34 @@ export function ModelSelector({
       isServerConfigured: config.isServerConfigured,
     }));
 
+  // For students, use admin-configured providers (no API keys exposed)
+  const studentMode = isStudent && availableProviders.length > 0;
+  const displayProviders = studentMode
+    ? availableProviders.map((p) => ({
+        id: p.id as ProviderId,
+        name: p.name,
+        icon: providersConfig[p.id as ProviderId]?.icon,
+        isServerConfigured: true,
+      }))
+    : configuredProviders;
+
   const handleSelect = (pid: ProviderId, mid: string) => {
     onModelChange(pid, mid);
   };
 
   // Filter models across all providers by search query and server model restrictions
   const getFilteredModelsForProvider = (pid: ProviderId) => {
+    // In student mode, use models from the available providers list
+    if (studentMode) {
+      const studentProvider = availableProviders.find((p) => p.id === pid);
+      const models = studentProvider?.models || [];
+      if (!searchQuery) return models;
+      return models.filter(
+        (model) =>
+          model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          model.id.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
     const config = providersConfig[pid];
     let models = config?.models || [];
     // When using server config without own key, restrict to server-allowed models
@@ -109,9 +145,9 @@ export function ModelSelector({
   }, [providerId]);
 
   // Fallback: if activeProvider is not in configured providers, use the first configured one
-  const effectiveProvider = configuredProviders.some((p) => p.id === activeProvider)
+  const effectiveProvider = displayProviders.some((p) => p.id === activeProvider)
     ? activeProvider
-    : (configuredProviders[0]?.id ?? activeProvider);
+    : (displayProviders[0]?.id ?? activeProvider);
 
   const filteredModels = getFilteredModelsForProvider(effectiveProvider);
 
@@ -183,7 +219,7 @@ export function ModelSelector({
     [providersConfig, t],
   );
 
-  if (configuredProviders.length === 0) {
+  if (displayProviders.length === 0) {
     return (
       <div className="p-4 border-2 border-dashed rounded-lg text-center text-sm text-muted-foreground">
         {t('settings.configureProvidersFirst')}
@@ -196,9 +232,11 @@ export function ModelSelector({
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left: Provider List */}
         <div className="w-48 border-r bg-muted/30 overflow-y-auto shrink-0">
-          {configuredProviders.map((provider) => {
+          {displayProviders.map((provider) => {
             const filteredCount = getFilteredModelsForProvider(provider.id).length;
-            const totalCount = providersConfig[provider.id]?.models?.length || 0;
+            const totalCount = studentMode
+              ? (availableProviders.find((p) => p.id === provider.id)?.models?.length ?? 0)
+              : (providersConfig[provider.id]?.models?.length || 0);
             const isActive = effectiveProvider === provider.id;
 
             return (

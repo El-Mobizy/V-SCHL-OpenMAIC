@@ -33,6 +33,40 @@ interface ServerConfig {
   webSearch: Record<string, ServerProviderEntry>;
 }
 
+// ─── Symfony API Key Cache ───
+// Fetches API keys configured by school admin in Symfony.
+// Cache with 1-minute TTL to avoid hitting Symfony on every request.
+let symfonyKeys: Record<string, { apiKey: string; baseUrl?: string }> | null = null;
+let symfonyKeysLastFetch = 0;
+const SYMFONY_KEYS_TTL = 60_000; // 1 minute cache
+
+async function getSymfonyKeys(): Promise<Record<string, { apiKey: string; baseUrl?: string }>> {
+  const now = Date.now();
+  if (symfonyKeys && now - symfonyKeysLastFetch < SYMFONY_KEYS_TTL) {
+    return symfonyKeys;
+  }
+
+  const SYMFONY_API_URL = process.env.SYMFONY_API_URL;
+  if (!SYMFONY_API_URL) return {};
+
+  try {
+    const serviceToken = process.env.SYMFONY_SERVICE_TOKEN;
+    const res = await fetch(`${SYMFONY_API_URL}/api/admin/api-keys`, {
+      headers: serviceToken ? { Authorization: `Bearer ${serviceToken}` } : {},
+    });
+    if (!res.ok) return symfonyKeys ?? {};
+    const keys = await res.json();
+    symfonyKeys = {};
+    for (const entry of keys) {
+      symfonyKeys[entry.provider] = { apiKey: entry.api_key, baseUrl: entry.base_url };
+    }
+    symfonyKeysLastFetch = now;
+    return symfonyKeys;
+  } catch {
+    return symfonyKeys ?? {};
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Env-var prefix mappings
 // ---------------------------------------------------------------------------
@@ -247,6 +281,15 @@ export function getServerProviders(): Record<string, { models?: string[]; baseUr
 export function resolveApiKey(providerId: string, clientKey?: string): string {
   if (clientKey) return clientKey;
   return getConfig().providers[providerId]?.apiKey || '';
+}
+
+/** Async version that also checks Symfony-stored keys as a fallback */
+export async function resolveApiKeyAsync(providerId: string, clientKey?: string): Promise<string> {
+  if (clientKey) return clientKey;
+  const serverKey = getConfig().providers[providerId]?.apiKey;
+  if (serverKey) return serverKey;
+  const sKeys = await getSymfonyKeys();
+  return sKeys[providerId]?.apiKey ?? '';
 }
 
 /** Resolve base URL: client > server > undefined */
