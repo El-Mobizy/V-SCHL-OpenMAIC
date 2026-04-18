@@ -1,14 +1,21 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useBranding } from '@/lib/hooks/use-branding';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const { user, logout } = useAuth();
   const { logoUrl } = useBranding();
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -20,7 +27,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <span className="text-sm text-muted-foreground">
             {user?.name} ({user?.role})
           </span>
-          <Button variant="ghost" size="sm" onClick={logout}>
+          <Button variant="ghost" size="sm" onClick={handleLogout}>
             <LogOut className="h-4 w-4 mr-1" />
             Sign out
           </Button>
