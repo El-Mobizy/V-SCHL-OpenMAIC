@@ -12,7 +12,6 @@ export interface CallOpts {
   provider: string;
   model: string;
   messages: ModelMessage[];
-  accessToken: string;
   signal?: AbortSignal;
 }
 
@@ -61,8 +60,8 @@ export async function callLLM(opts: CallOpts) {
       opts.studentId,
       opts.provider,
       opts.model,
-      result.usage.inputTokens ?? 0,
-      result.usage.outputTokens ?? 0,
+      result.totalUsage.inputTokens ?? 0,
+      result.totalUsage.outputTokens ?? 0,
     );
     return result;
   } catch (e) {
@@ -77,14 +76,19 @@ export async function streamLLM(opts: CallOpts) {
     model,
     messages: opts.messages,
     abortSignal: opts.signal,
-    onFinish: ({ usage }) => {
+    onFinish: ({ totalUsage }) => {
       tokenCounter.recordUsage(
         opts.studentId,
         opts.provider,
         opts.model,
-        usage.inputTokens ?? 0,
-        usage.outputTokens ?? 0,
+        totalUsage.inputTokens ?? 0,
+        totalUsage.outputTokens ?? 0,
       );
+    },
+    onAbort: ({ steps }) => {
+      const inTok = steps.reduce((s, st) => s + (st.usage.inputTokens ?? 0), 0);
+      const outTok = steps.reduce((s, st) => s + (st.usage.outputTokens ?? 0), 0);
+      tokenCounter.recordUsage(opts.studentId, opts.provider, opts.model, inTok, outTok);
     },
   });
 }
