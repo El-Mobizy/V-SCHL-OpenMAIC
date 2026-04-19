@@ -43,8 +43,11 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user } = await api.auth.me();
           set({ user, isAuthenticated: true });
-        } catch {
-          set({ user: null, isAuthenticated: false });
+        } catch (e) {
+          if (e instanceof ApiError && e.code === 'UNAUTHORIZED') {
+            set({ user: null, isAuthenticated: false });
+          }
+          // On NETWORK/SERVER: keep persisted state; a real 401 from any API call will clear it.
         }
       },
 
