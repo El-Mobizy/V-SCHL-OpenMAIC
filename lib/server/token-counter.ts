@@ -85,7 +85,7 @@ class TokenCounter {
     cached.callsSinceSync = 0;
 
     try {
-      await fetch(`${SYMFONY_API_URL}/api/token-usage`, {
+      const res = await fetch(`${SYMFONY_API_URL}/api/token-usage`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -96,7 +96,11 @@ class TokenCounter {
           entries: usage,
         }),
       });
+      if (!res.ok) {
+        throw new Error(`Symfony token-usage returned ${res.status}`);
+      }
     } catch {
+      // Requeue at the front so order is preserved.
       cached.pendingUsage.unshift(...usage);
     }
   }

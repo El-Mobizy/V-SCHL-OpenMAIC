@@ -38,6 +38,9 @@ export type { ThinkingConfig } from '@/lib/types/provider';
 export interface LLMMetering {
   studentId: number;
   providerId: ProviderId;
+  /** The student's JWT access token — used to lazy-hydrate the quota cache
+   *  on miss (e.g. after server restart or on a refresh path). Server-to-server only. */
+  accessToken: string;
 }
 
 // Re-export the parameter types accepted by AI SDK
@@ -302,10 +305,27 @@ const DEFAULT_VALIDATE = (text: string) => text.trim().length > 0;
 /**
  * Pre-call quota check. No-op when `metering` is undefined.
  * Throws `ApiError(429, 'RATE_LIMITED', ...)` when the student's quota is exhausted.
+ * Throws `ApiError(503, 'SERVER', ...)` when the quota service is unavailable.
+ *
+ * On cache miss (allowed=false AND no resetDate means the counter has no entry
+ * for this student — e.g. after server restart, post-refresh, or multi-replica),
+ * the quota is hydrated lazily from Symfony and re-checked.
  */
-function preflightQuota(metering: LLMMetering | undefined): void {
+async function preflightQuota(metering: LLMMetering | undefined): Promise<void> {
   if (!metering) return;
-  const q = tokenCounter.checkQuota(metering.studentId);
+  let q = tokenCounter.checkQuota(metering.studentId);
+
+  // Cache miss: allowed=false AND no resetDate means the counter has no entry
+  // for this student. Hydrate lazily from Symfony and re-check.
+  if (!q.allowed && !q.resetDate) {
+    try {
+      await tokenCounter.initQuota(metering.studentId, metering.accessToken);
+    } catch {
+      throw new ApiError(503, 'SERVER', 'Quota service unavailable');
+    }
+    q = tokenCounter.checkQuota(metering.studentId);
+  }
+
   if (!q.allowed) {
     throw new ApiError(
       429,
@@ -354,7 +374,7 @@ export async function callLLM<T extends GenerateTextParams>(
   metering?: LLMMetering,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<GenerateTextResult<any, any>> {
-  preflightQuota(metering);
+  await preflightQuota(metering);
 
   const maxAttempts = (retryOptions?.retries ?? 0) + 1;
   const validate = retryOptions?.validate ?? (maxAttempts > 1 ? DEFAULT_VALIDATE : undefined);
@@ -413,11 +433,8 @@ export async function callLLM<T extends GenerateTextParams>(
     return lastResult;
   }
   if (lastError instanceof ApiError) throw lastError;
-  throw new ApiError(
-    500,
-    'SERVER',
-    lastError instanceof Error ? lastError.message : 'LLM call failed',
-  );
+  log.error(`[${source}] Unhandled error after retries`, lastError);
+  throw new ApiError(500, 'SERVER', 'LLM call failed');
 }
 
 /**
@@ -433,14 +450,14 @@ export async function callLLM<T extends GenerateTextParams>(
  *   `onFinish` / `onAbort` fires (any caller-supplied handlers are preserved
  *   and invoked after the metering hook).
  */
-export function streamLLM<T extends StreamTextParams>(
+export async function streamLLM<T extends StreamTextParams>(
   params: T,
   source: string,
   thinking?: ThinkingConfig,
   metering?: LLMMetering,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): StreamTextResult<any, any> {
-  preflightQuota(metering);
+): Promise<StreamTextResult<any, any>> {
+  await preflightQuota(metering);
 
   // Compose metering onto caller-provided onFinish / onAbort so we can record
   // usage in the same event sink streamText already emits on.
