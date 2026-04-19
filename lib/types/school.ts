@@ -11,13 +11,6 @@ export interface SchoolUser {
   level: string;
 }
 
-/** JWT tokens from Symfony login response */
-export interface AuthTokens {
-  access_token: string;
-  refresh_token: string;
-  user: SchoolUser;
-}
-
 /** Course from Symfony */
 export interface Course {
   id: number;
