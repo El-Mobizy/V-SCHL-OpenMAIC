@@ -99,7 +99,10 @@ export default function ApiKeysPage() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, model }),
+        body: JSON.stringify({
+          model: `${provider}:${model}`,
+          requiresApiKey: true,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) toast.success(`${provider}: works`);
