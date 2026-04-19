@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { SchoolBranding } from '@/lib/types/school';
-import { fetchBranding } from '@/lib/api/symfony-client';
+import { api } from '@/lib/api/symfony';
 
 interface BrandingContextValue {
   branding: SchoolBranding | null;
@@ -19,7 +19,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    fetchBranding()
+    api.school.branding()
       .then((data) => {
         setBranding(data);
         // Apply CSS variable overrides

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { fetchCourse, fetchSyllabus, fetchProgress, updateProgress, saveSyllabus } from '@/lib/api/symfony-client';
+import { api } from '@/lib/api/symfony';
 import type { Course, CourseProgress } from '@/lib/types/school';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
@@ -27,15 +27,15 @@ export default function CourseViewerPage() {
     (async () => {
       try {
         const [courseData, syllabusData] = await Promise.all([
-          fetchCourse(courseId),
-          fetchSyllabus(courseId, user.id),
+          api.courses.get(courseId),
+          api.courses.syllabus.get(courseId, user.id),
         ]);
         setCourse(courseData);
 
         if (syllabusData) {
           setSyllabus(syllabusData);
           try {
-            const prog = await fetchProgress(user.id, courseId);
+            const prog = await api.courses.progress.get(user.id, courseId);
             setProgress(prog);
             setCurrentScene(prog.current_scene_index);
           } catch {
@@ -80,7 +80,7 @@ export default function CourseViewerPage() {
       }
 
       // Save to Symfony
-      await saveSyllabus(courseId, user.id, result);
+      await api.courses.syllabus.save(courseId, user.id, result);
       setSyllabus(result);
       setViewState('ready');
     } catch (err) {
@@ -92,7 +92,7 @@ export default function CourseViewerPage() {
     if (!user) return;
     setCurrentScene(index);
     try {
-      await updateProgress(user.id, courseId, index);
+      await api.courses.progress.update(user.id, courseId, index);
     } catch {
       // Progress update failed — non-critical
     }

@@ -63,3 +63,19 @@ export interface AvailableProvider {
   name: string;
   models: Array<{ id: string; name: string }>;
 }
+
+export interface ApiKey {
+  provider: string;
+  api_key?: string;         // only when writing; GET returns `has_key` instead
+  base_url?: string;
+  models: string[];
+  has_key?: boolean;
+}
+
+export interface UsageEntry {
+  provider: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  timestamp: string;        // ISO 8601
+}

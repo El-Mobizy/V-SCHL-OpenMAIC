@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
-import { fetchCourses, fetchProgress } from '@/lib/api/symfony-client';
+import { api } from '@/lib/api/symfony';
 import type { Course, CourseProgress } from '@/lib/types/school';
 import { Button } from '@/components/ui/button';
 
@@ -18,14 +18,14 @@ export default function DashboardPage() {
     if (!user) return;
     (async () => {
       try {
-        const courseList = await fetchCourses(user.id);
+        const courseList = await api.courses.list(user.id);
         setCourses(courseList);
 
         const progressMap: Record<number, CourseProgress> = {};
         await Promise.all(
           courseList.map(async (c) => {
             try {
-              progressMap[c.id] = await fetchProgress(user.id, c.id);
+              progressMap[c.id] = await api.courses.progress.get(user.id, c.id);
             } catch {
               // No progress yet
             }
