@@ -466,7 +466,7 @@ async function fetchFromSymfony(): Promise<Map<string, ResolvedProviderConfig>> 
   }>;
   const m = new Map<string, ResolvedProviderConfig>();
   for (const k of keys) {
-    if (k.api_key) m.set(k.provider, { apiKey: k.api_key, baseUrl: k.base_url, models: k.models });
+    if (k.api_key) m.set(k.provider, { apiKey: k.api_key, baseUrl: k.base_url, models: k.models ?? [] });
   }
   return m;
 }
