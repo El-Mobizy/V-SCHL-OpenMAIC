@@ -1,24 +1,36 @@
 // app/api/auth/me/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { decodeJwtPayload, isTokenExpired } from '@/lib/auth/jwt';
+import { decodeJwtPayload, decodeStudentId } from '@/lib/auth/jwt';
 
 export async function GET(req: NextRequest) {
   const token = req.cookies.get('access_token')?.value;
-  if (!token || isTokenExpired(token)) {
+  if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const p = decodeJwtPayload(token);
-  if (!p?.sub) return NextResponse.json({ error: 'Malformed token' }, { status: 401 });
+  const id = decodeStudentId(token);
+  if (id === null) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const payload = decodeJwtPayload(token);
+  if (!payload) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const role = payload.role;
+  if (role !== 'admin' && role !== 'student') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   return NextResponse.json({
     user: {
-      id: Number(p.sub),
-      email: String(p.email ?? ''),
-      name:  String(p.name  ?? ''),
-      role:  p.role as 'admin' | 'student',
-      department: String(p.department ?? ''),
-      program:    String(p.program    ?? ''),
-      level:      String(p.level      ?? ''),
+      id,
+      email: String(payload.email ?? ''),
+      name:  String(payload.name  ?? ''),
+      role,
+      department: String(payload.department ?? ''),
+      program:    String(payload.program    ?? ''),
+      level:      String(payload.level      ?? ''),
     },
+  }, {
+    headers: { 'Cache-Control': 'private, no-store' },
   });
 }

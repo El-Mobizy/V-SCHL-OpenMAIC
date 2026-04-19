@@ -19,6 +19,16 @@ export function isTokenExpired(token: string): boolean {
   return payload.exp * 1000 < Date.now();
 }
 
+/** Extract a positive integer student/user ID from a JWT's `sub` claim.
+ *  Returns null if the token is malformed, expired, or has a non-integer sub. */
+export function decodeStudentId(token: string): number | null {
+  if (isTokenExpired(token)) return null;
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+  const id = Number(payload.sub);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 /** Extract SchoolUser from JWT payload */
 export function extractUser(token: string): SchoolUser | null {
   const payload = decodeJwtPayload(token);
