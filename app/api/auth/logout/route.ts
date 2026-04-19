@@ -1,8 +1,9 @@
+// app/api/auth/logout/route.ts
 import { NextResponse } from 'next/server';
+import { clearAuthCookies } from '@/lib/server/auth-cookies';
 
 export async function POST() {
-  const response = NextResponse.json({ ok: true });
-  response.cookies.delete('access_token');
-  response.cookies.delete('refresh_token');
-  return response;
+  const res = NextResponse.json({ ok: true });
+  clearAuthCookies(res);
+  return res;
 }
