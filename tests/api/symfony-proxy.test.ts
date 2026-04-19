@@ -142,4 +142,35 @@ describe('BFF proxy — additional coverage', () => {
     const body = await res.json();
     expect(body.code).toBe('NETWORK');
   });
+
+  it('rejects chunked POST body exceeding 5MB (no content-length header)', async () => {
+    const oversized = 'x'.repeat(6 * 1024 * 1024);  // 6 MB string
+    const req = new NextRequest('http://test/api/symfony/courses/1/syllabus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, // NO content-length
+      body: oversized,
+    });
+    req.cookies.set('access_token', 'tok');
+    const { POST } = await import('@/app/api/symfony/[...path]/route');
+    const res = await POST(req, { params: Promise.resolve({ path: ['courses', '1', 'syllabus'] }) });
+    expect(res.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('strips upstream authorization / www-authenticate / x-service-token headers', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: {
+        'Authorization': 'Bearer leaked',
+        'WWW-Authenticate': 'Bearer realm="x"',
+        'X-Service-Token': 'also-leaked',
+      },
+    }));
+    const req = new NextRequest('http://test/api/symfony/school/branding');
+    req.cookies.set('access_token', 'tok');
+    const res = await GET(req, { params: Promise.resolve({ path: ['school', 'branding'] }) });
+    expect(res.headers.get('authorization')).toBeNull();
+    expect(res.headers.get('www-authenticate')).toBeNull();
+    expect(res.headers.get('x-service-token')).toBeNull();
+  });
 });

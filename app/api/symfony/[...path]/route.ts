@@ -12,6 +12,10 @@ const STRIPPED_HEADERS = new Set([
   'connection',
   'keep-alive',
   'transfer-encoding',
+  // P0.5: never forward credentials-bearing headers upstream → downstream
+  'authorization',
+  'www-authenticate',
+  'x-service-token',
 ]);
 
 type Ctx = { params: Promise<{ path: string[] }> };
@@ -40,6 +44,12 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
       req.method === 'GET' || req.method === 'DELETE'
         ? undefined
         : await req.text();
+
+    // Defense-in-depth: content-length can be absent with chunked encoding.
+    // Re-check after reading the body.
+    if (bodyText !== undefined && Buffer.byteLength(bodyText, 'utf8') > MAX_BODY) {
+      return NextResponse.json({ error: 'Content too large (max 5MB)' }, { status: 413 });
+    }
 
     // Read env inside the function so vitest stubEnv can override it (see tests/api/symfony-proxy.test.ts).
     const upstreamUrl = `${process.env.SYMFONY_API_URL}/api/${path.join('/')}${req.nextUrl.search || ''}`;
