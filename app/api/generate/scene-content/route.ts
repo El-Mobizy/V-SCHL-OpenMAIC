@@ -6,7 +6,7 @@
  * Does NOT generate actions — use /api/generate/scene-actions for that.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import {
   applyOutlineFallbacks,
@@ -16,29 +16,17 @@ import {
 import type { AgentInfo } from '@/lib/generation/generation-pipeline';
 import type { SceneOutline, PdfImage, ImageMapping } from '@/lib/types/generation';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import {
+  apiError,
+  apiErrorResponseFromApiError,
+  apiSuccess,
+} from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { parseModelString } from '@/lib/ai/providers';
 import { ApiError } from '@/lib/api/errors';
 
 const log = createLogger('Scene Content API');
-
-function apiErrorResponse(e: ApiError): NextResponse {
-  const errorCode =
-    e.code === 'UNAUTHORIZED'
-      ? 'UNAUTHORIZED'
-      : e.code === 'RATE_LIMITED'
-        ? 'QUOTA_EXCEEDED'
-        : 'INTERNAL_ERROR';
-  return NextResponse.json(
-    { success: false as const, errorCode, error: e.detail },
-    {
-      status: e.status,
-      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
-    },
-  );
-}
 
 export const maxDuration = 300;
 
@@ -47,7 +35,7 @@ export async function POST(req: NextRequest) {
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {
-    if (e instanceof ApiError) return apiErrorResponse(e);
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
     throw e;
   }
 
@@ -200,7 +188,7 @@ export async function POST(req: NextRequest) {
 
     return apiSuccess({ content, effectiveOutline });
   } catch (error) {
-    if (error instanceof ApiError) return apiErrorResponse(error);
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
     log.error('Scene content generation error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }

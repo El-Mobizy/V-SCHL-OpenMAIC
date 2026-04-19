@@ -5,32 +5,20 @@
  * Students @question or @judge an agent, and this endpoint generates a response.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import type { PBLAgent, PBLIssue } from '@/lib/pbl/types';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import {
+  apiError,
+  apiErrorResponseFromApiError,
+  apiSuccess,
+} from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { parseModelString } from '@/lib/ai/providers';
 import { ApiError } from '@/lib/api/errors';
 const log = createLogger('PBL Chat');
-
-function apiErrorResponse(e: ApiError): NextResponse {
-  const errorCode =
-    e.code === 'UNAUTHORIZED'
-      ? 'UNAUTHORIZED'
-      : e.code === 'RATE_LIMITED'
-        ? 'QUOTA_EXCEEDED'
-        : 'INTERNAL_ERROR';
-  return NextResponse.json(
-    { success: false as const, errorCode, error: e.detail },
-    {
-      status: e.status,
-      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
-    },
-  );
-}
 
 interface PBLChatRequest {
   message: string;
@@ -46,7 +34,7 @@ export async function POST(req: NextRequest) {
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {
-    if (e instanceof ApiError) return apiErrorResponse(e);
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
     throw e;
   }
 
@@ -103,7 +91,7 @@ export async function POST(req: NextRequest) {
 
     return apiSuccess({ message: result.text, agentName: agent.name });
   } catch (error) {
-    if (error instanceof ApiError) return apiErrorResponse(error);
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
     log.error('Error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }

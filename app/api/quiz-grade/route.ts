@@ -5,36 +5,19 @@
  * Used for short-answer (text) questions that cannot be graded locally.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import {
+  apiError,
+  apiErrorResponseFromApiError,
+  apiSuccess,
+} from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { parseModelString } from '@/lib/ai/providers';
 import { ApiError } from '@/lib/api/errors';
 const log = createLogger('Quiz Grade');
-
-/**
- * Map an ApiError from the LLM wrapper back into this route's
- * existing `{ success, errorCode, error }` envelope (with Retry-After
- * when the wrapper signals rate-limiting).
- */
-function apiErrorResponse(e: ApiError): NextResponse {
-  const errorCode =
-    e.code === 'UNAUTHORIZED'
-      ? 'UNAUTHORIZED'
-      : e.code === 'RATE_LIMITED'
-        ? 'QUOTA_EXCEEDED'
-        : 'INTERNAL_ERROR';
-  return NextResponse.json(
-    { success: false as const, errorCode, error: e.detail },
-    {
-      status: e.status,
-      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
-    },
-  );
-}
 
 interface GradeRequest {
   question: string;
@@ -54,7 +37,7 @@ export async function POST(req: NextRequest) {
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {
-    if (e instanceof ApiError) return apiErrorResponse(e);
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
     throw e;
   }
 
@@ -129,7 +112,7 @@ ${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${
 
     return apiSuccess({ ...gradeResult });
   } catch (error) {
-    if (error instanceof ApiError) return apiErrorResponse(error);
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
     log.error('Error:', error);
     return apiError('INTERNAL_ERROR', 500, 'Failed to grade answer');
   }

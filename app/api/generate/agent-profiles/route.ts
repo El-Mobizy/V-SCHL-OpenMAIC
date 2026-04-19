@@ -5,33 +5,21 @@
  * based on stage info and scene outlines.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { nanoid } from 'nanoid';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import {
+  apiError,
+  apiErrorResponseFromApiError,
+  apiSuccess,
+} from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { parseModelString } from '@/lib/ai/providers';
 import { ApiError } from '@/lib/api/errors';
 
 const log = createLogger('Agent Profiles API');
-
-function apiErrorResponse(e: ApiError): NextResponse {
-  const errorCode =
-    e.code === 'UNAUTHORIZED'
-      ? 'UNAUTHORIZED'
-      : e.code === 'RATE_LIMITED'
-        ? 'QUOTA_EXCEEDED'
-        : 'INTERNAL_ERROR';
-  return NextResponse.json(
-    { success: false as const, errorCode, error: e.detail },
-    {
-      status: e.status,
-      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
-    },
-  );
-}
 
 export const maxDuration = 120;
 
@@ -73,7 +61,7 @@ export async function POST(req: NextRequest) {
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {
-    if (e instanceof ApiError) return apiErrorResponse(e);
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
     throw e;
   }
 
@@ -257,7 +245,7 @@ Return a JSON object with this exact structure:
 
     return apiSuccess({ agents });
   } catch (error) {
-    if (error instanceof ApiError) return apiErrorResponse(error);
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
     log.error('Agent profiles generation error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }

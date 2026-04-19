@@ -11,7 +11,7 @@
  *   { type: 'error', error: string }
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { streamLLM } from '@/lib/ai/llm';
 import { buildPrompt, PROMPT_IDS } from '@/lib/generation/prompts';
 import {
@@ -30,29 +30,13 @@ import type {
   SceneOutline,
   ImageMapping,
 } from '@/lib/types/generation';
-import { apiError } from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { parseModelString } from '@/lib/ai/providers';
 import { ApiError } from '@/lib/api/errors';
 const log = createLogger('Outlines Stream');
-
-function apiErrorResponse(e: ApiError): NextResponse {
-  const errorCode =
-    e.code === 'UNAUTHORIZED'
-      ? 'UNAUTHORIZED'
-      : e.code === 'RATE_LIMITED'
-        ? 'QUOTA_EXCEEDED'
-        : 'INTERNAL_ERROR';
-  return NextResponse.json(
-    { success: false as const, errorCode, error: e.detail },
-    {
-      status: e.status,
-      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
-    },
-  );
-}
 
 export const maxDuration = 300;
 
@@ -120,7 +104,7 @@ export async function POST(req: NextRequest) {
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {
-    if (e instanceof ApiError) return apiErrorResponse(e);
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
     throw e;
   }
 
@@ -328,6 +312,14 @@ export async function POST(req: NextRequest) {
                 controller.enqueue(encoder.encode(`data: ${retryEvent}\n\n`));
               }
             } catch (error) {
+              // Rate-limit: don't retry — the quota won't refill within the
+              // retry window, so re-attempting just pollutes logs and delays
+              // the surfaced failure. Bubble out to the outer catch, which
+              // emits the `error` SSE event for the client.
+              if (error instanceof ApiError && error.code === 'RATE_LIMITED') {
+                throw error;
+              }
+
               lastError = error instanceof Error ? error.message : String(error);
 
               if (attempt <= MAX_STREAM_RETRIES) {
