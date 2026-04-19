@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { api } from '@/lib/api/symfony';
+import { ApiError } from '@/lib/api/errors';
 import type { Course, CourseProgress } from '@/lib/types/school';
 import { Button } from '@/components/ui/button';
 
@@ -26,8 +27,8 @@ export default function DashboardPage() {
           courseList.map(async (c) => {
             try {
               progressMap[c.id] = await api.courses.progress.get(user.id, c.id);
-            } catch {
-              // No progress yet
+            } catch (e) {
+              if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
             }
           }),
         );

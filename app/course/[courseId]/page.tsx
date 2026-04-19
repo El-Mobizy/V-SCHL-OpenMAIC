@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { api } from '@/lib/api/symfony';
+import { ApiError } from '@/lib/api/errors';
 import type { Course, CourseProgress } from '@/lib/types/school';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
@@ -26,20 +27,28 @@ export default function CourseViewerPage() {
     if (!user) return;
     (async () => {
       try {
-        const [courseData, syllabusData] = await Promise.all([
-          api.courses.get(courseId),
-          api.courses.syllabus.get(courseId, user.id),
-        ]);
+        const courseData = await api.courses.get(courseId);
         setCourse(courseData);
+
+        let syllabusData: any = null;
+        try {
+          syllabusData = await api.courses.syllabus.get(courseId, user.id);
+        } catch (e) {
+          if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
+        }
+
+        let progressData: CourseProgress | null = null;
+        try {
+          progressData = await api.courses.progress.get(user.id, courseId);
+        } catch (e) {
+          if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
+        }
 
         if (syllabusData) {
           setSyllabus(syllabusData);
-          try {
-            const prog = await api.courses.progress.get(user.id, courseId);
-            setProgress(prog);
-            setCurrentScene(prog.current_scene_index);
-          } catch {
-            // No progress yet
+          if (progressData) {
+            setProgress(progressData);
+            setCurrentScene(progressData.current_scene_index);
           }
           setViewState('ready');
         } else {
