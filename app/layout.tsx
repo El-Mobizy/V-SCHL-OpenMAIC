@@ -11,6 +11,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { ServerProvidersInit } from '@/components/server-providers-init';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { BrandingProvider } from '@/lib/contexts/branding-context';
+import { ApiErrorBoundary } from '@/lib/hooks/use-api-error';
 
 const inter = localFont({
   src: '../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
@@ -39,9 +40,11 @@ export default function RootLayout({
           <I18nProvider>
             <AuthProvider>
               <BrandingProvider>
-                <ServerProvidersInit />
-                {children}
-                <Toaster position="top-center" />
+                <ApiErrorBoundary>
+                  <ServerProvidersInit />
+                  {children}
+                  <Toaster position="top-center" />
+                </ApiErrorBoundary>
               </BrandingProvider>
             </AuthProvider>
           </I18nProvider>
