@@ -455,6 +455,7 @@ interface ResolvedProviderConfig { apiKey: string; baseUrl?: string; models?: st
 
 const CACHE_TTL_MS = 60_000;
 let cache: { at: number; data: Map<string, ResolvedProviderConfig> } | null = null;
+let inFlightFetch: Promise<Map<string, ResolvedProviderConfig>> | null = null;
 
 async function fetchFromSymfony(): Promise<Map<string, ResolvedProviderConfig>> {
   const res = await fetch(`${process.env.SYMFONY_API_URL}/api/admin/api-keys`, {
@@ -473,7 +474,14 @@ async function fetchFromSymfony(): Promise<Map<string, ResolvedProviderConfig>> 
 
 export async function loadProviderConfig(provider: string): Promise<ResolvedProviderConfig> {
   if (!cache || Date.now() - cache.at > CACHE_TTL_MS) {
-    cache = { at: Date.now(), data: await fetchFromSymfony() };
+    if (!inFlightFetch) {
+      inFlightFetch = fetchFromSymfony().finally(() => { inFlightFetch = null; });
+    }
+    const data = await inFlightFetch;
+    // Only write the cache if nobody else updated it while we were waiting.
+    if (!cache || Date.now() - cache.at > CACHE_TTL_MS) {
+      cache = { at: Date.now(), data };
+    }
   }
   const fromDb = cache.data.get(provider);
   if (fromDb) return fromDb;
@@ -491,4 +499,7 @@ export async function loadProviderConfig(provider: string): Promise<ResolvedProv
 }
 
 /** @internal */
-export function __clearProviderConfigCache(): void { cache = null; }
+export function __clearProviderConfigCache(): void {
+  cache = null;
+  inFlightFetch = null;
+}

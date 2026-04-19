@@ -241,4 +241,22 @@ describe('loadProviderConfig', () => {
     vi.stubEnv('OPENAI_API_KEY', '');
     await expect(loadProviderConfig('openai')).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });
   });
+
+  it('is single-flight: 10 concurrent callers share one Symfony fetch', async () => {
+    let resolveFetch!: (res: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => { resolveFetch = r; }));
+    vi.stubEnv('OPENAI_API_KEY', '');  // force DB-only resolution
+
+    const calls = Promise.all(
+      Array.from({ length: 10 }, () => loadProviderConfig('openai')),
+    );
+    resolveFetch(new Response(
+      JSON.stringify([{ provider: 'openai', api_key: 'sk-db', base_url: 'b', models: ['m'], has_key: true }]),
+      { status: 200 },
+    ));
+    const results = await calls;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    for (const r of results) expect(r.apiKey).toBe('sk-db');
+  });
 });
