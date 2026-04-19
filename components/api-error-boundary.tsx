@@ -1,4 +1,4 @@
-// lib/hooks/use-api-error.tsx
+// components/api-error-boundary.tsx
 'use client';
 import { useEffect } from 'react';
 import { toast } from 'sonner';

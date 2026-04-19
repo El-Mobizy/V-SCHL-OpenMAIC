@@ -11,7 +11,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { ServerProvidersInit } from '@/components/server-providers-init';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { BrandingProvider } from '@/lib/contexts/branding-context';
-import { ApiErrorBoundary } from '@/lib/hooks/use-api-error';
+import { ApiErrorBoundary } from '@/components/api-error-boundary';
 
 const inter = localFont({
   src: '../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
