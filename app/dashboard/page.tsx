@@ -72,6 +72,7 @@ export default function DashboardPage() {
             return (
               <div
                 key={course.id}
+                data-testid="course-card"
                 className="border rounded-lg p-5 bg-card hover:shadow-md transition-shadow space-y-3"
               >
                 <h3 className="font-semibold">{course.title}</h3>
