@@ -9,11 +9,36 @@ import type { GenerateTextResult, StreamTextResult } from 'ai';
 import { createLogger } from '@/lib/logger';
 import { PROVIDERS } from './providers';
 import { thinkingContext } from './thinking-context';
-import type { ProviderType, ThinkingCapability, ThinkingConfig } from '@/lib/types/provider';
+import type {
+  ProviderId,
+  ProviderType,
+  ThinkingCapability,
+  ThinkingConfig,
+} from '@/lib/types/provider';
+import { ApiError } from '@/lib/api/errors';
+import { tokenCounter } from '@/lib/server/token-counter';
 const log = createLogger('LLM');
 
 // Re-export for external use
 export type { ThinkingConfig } from '@/lib/types/provider';
+
+/**
+ * Optional metering hook for quota enforcement + usage recording.
+ *
+ * When supplied to `callLLM` / `streamLLM`:
+ * - Pre-flight: `tokenCounter.checkQuota(studentId)` is consulted; a denial
+ *   throws `ApiError(429, 'RATE_LIMITED', ...)` before any provider call.
+ * - Post-call: `tokenCounter.recordUsage(...)` is invoked with the model's
+ *   `totalUsage` (multi-step aware). For streams, this is wired onto the
+ *   params' `onFinish`/`onAbort` callbacks so abort-time partial usage is
+ *   still captured.
+ *
+ * Omit to preserve the original, un-metered behavior.
+ */
+export interface LLMMetering {
+  studentId: number;
+  providerId: ProviderId;
+}
 
 // Re-export the parameter types accepted by AI SDK
 type GenerateTextParams = Parameters<typeof generateText>[0];
@@ -275,20 +300,62 @@ export interface LLMRetryOptions {
 const DEFAULT_VALIDATE = (text: string) => text.trim().length > 0;
 
 /**
+ * Pre-call quota check. No-op when `metering` is undefined.
+ * Throws `ApiError(429, 'RATE_LIMITED', ...)` when the student's quota is exhausted.
+ */
+function preflightQuota(metering: LLMMetering | undefined): void {
+  if (!metering) return;
+  const q = tokenCounter.checkQuota(metering.studentId);
+  if (!q.allowed) {
+    throw new ApiError(
+      429,
+      'RATE_LIMITED',
+      `Token quota exceeded${q.resetDate ? ` (resets ${q.resetDate})` : ''}`,
+    );
+  }
+}
+
+/**
+ * Record usage with the token counter. No-op when `metering` is undefined.
+ * Missing token counts are treated as zero.
+ */
+function recordUsageFor(
+  metering: LLMMetering | undefined,
+  modelId: string,
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+): void {
+  if (!metering) return;
+  tokenCounter.recordUsage(
+    metering.studentId,
+    metering.providerId,
+    modelId,
+    inputTokens ?? 0,
+    outputTokens ?? 0,
+  );
+}
+
+/**
  * Unified wrapper around `generateText`.
  *
  * @param params - Same parameters as AI SDK's `generateText`
  * @param source - A short label for log grouping (e.g. 'scene-stream', 'pbl-chat')
  * @param retryOptions - Optional retry-on-validation-failure settings
  * @param thinking - Optional per-call thinking config (overrides global LLM_THINKING_DISABLED)
+ * @param metering - Optional quota + usage hook. When provided, quota is
+ *   enforced pre-call and `totalUsage` is recorded post-call (exactly once per
+ *   successful call, including the post-retry `return lastResult` path).
  */
 export async function callLLM<T extends GenerateTextParams>(
   params: T,
   source: string,
   retryOptions?: LLMRetryOptions,
   thinking?: ThinkingConfig,
+  metering?: LLMMetering,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<GenerateTextResult<any, any>> {
+  preflightQuota(metering);
+
   const maxAttempts = (retryOptions?.retries ?? 0) + 1;
   const validate = retryOptions?.validate ?? (maxAttempts > 1 ? DEFAULT_VALIDATE : undefined);
 
@@ -318,6 +385,12 @@ export async function callLLM<T extends GenerateTextParams>(
         continue;
       }
 
+      recordUsageFor(
+        metering,
+        getModelId(params),
+        result.totalUsage?.inputTokens,
+        result.totalUsage?.outputTokens,
+      );
       return result;
     } catch (error) {
       lastError = error;
@@ -330,8 +403,21 @@ export async function callLLM<T extends GenerateTextParams>(
   }
 
   // All attempts exhausted — return last result or throw last error
-  if (lastResult) return lastResult;
-  throw lastError;
+  if (lastResult) {
+    recordUsageFor(
+      metering,
+      getModelId(params),
+      lastResult.totalUsage?.inputTokens,
+      lastResult.totalUsage?.outputTokens,
+    );
+    return lastResult;
+  }
+  if (lastError instanceof ApiError) throw lastError;
+  throw new ApiError(
+    500,
+    'SERVER',
+    lastError instanceof Error ? lastError.message : 'LLM call failed',
+  );
 }
 
 /**
@@ -342,16 +428,61 @@ export async function callLLM<T extends GenerateTextParams>(
  * @param params - Same parameters as AI SDK's `streamText`
  * @param source - A short label for log grouping
  * @param thinking - Optional per-call thinking config (overrides global LLM_THINKING_DISABLED)
+ * @param metering - Optional quota + usage hook. When provided, quota is
+ *   enforced before streaming starts and usage is recorded from whichever of
+ *   `onFinish` / `onAbort` fires (any caller-supplied handlers are preserved
+ *   and invoked after the metering hook).
  */
 export function streamLLM<T extends StreamTextParams>(
   params: T,
   source: string,
   thinking?: ThinkingConfig,
+  metering?: LLMMetering,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): StreamTextResult<any, any> {
+  preflightQuota(metering);
+
+  // Compose metering onto caller-provided onFinish / onAbort so we can record
+  // usage in the same event sink streamText already emits on.
+  let meteredParams: T = params;
+  if (metering) {
+    const modelId = getModelId(params);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = params as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const origOnFinish = p.onFinish as ((ev: any) => void | Promise<void>) | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const origOnAbort = p.onAbort as ((ev: any) => void | Promise<void>) | undefined;
+    meteredParams = {
+      ...params,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onFinish: (ev: any) => {
+        recordUsageFor(metering, modelId, ev?.totalUsage?.inputTokens, ev?.totalUsage?.outputTokens);
+        return origOnFinish?.(ev);
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onAbort: (ev: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const steps = (ev?.steps ?? []) as any[];
+        const inTok = steps.reduce(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (s: number, st: any) => s + (st?.usage?.inputTokens ?? 0),
+          0,
+        );
+        const outTok = steps.reduce(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (s: number, st: any) => s + (st?.usage?.outputTokens ?? 0),
+          0,
+        );
+        recordUsageFor(metering, modelId, inTok, outTok);
+        return origOnAbort?.(ev);
+      },
+    } as T;
+  }
+
   // Resolve effective thinking config and wrap in thinkingContext
   const effectiveThinking = thinking ?? getGlobalThinkingConfig();
-  const injectedParams = injectProviderOptions(params, effectiveThinking);
+  const injectedParams = injectProviderOptions(meteredParams, effectiveThinking);
   const result = thinkingContext.run(effectiveThinking, () => streamText(injectedParams));
 
   return result;
