@@ -5,12 +5,36 @@
  * Used for short-answer (text) questions that cannot be graded locally.
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 const log = createLogger('Quiz Grade');
+
+/**
+ * Map an ApiError from the LLM wrapper back into this route's
+ * existing `{ success, errorCode, error }` envelope (with Retry-After
+ * when the wrapper signals rate-limiting).
+ */
+function apiErrorResponse(e: ApiError): NextResponse {
+  const errorCode =
+    e.code === 'UNAUTHORIZED'
+      ? 'UNAUTHORIZED'
+      : e.code === 'RATE_LIMITED'
+        ? 'QUOTA_EXCEEDED'
+        : 'INTERNAL_ERROR';
+  return NextResponse.json(
+    { success: false as const, errorCode, error: e.detail },
+    {
+      status: e.status,
+      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
+    },
+  );
+}
 
 interface GradeRequest {
   question: string;
@@ -26,6 +50,14 @@ interface GradeResponse {
 }
 
 export async function POST(req: NextRequest) {
+  let studentAuth: { studentId: number; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponse(e);
+    throw e;
+  }
+
   try {
     const body = (await req.json()) as GradeRequest;
     const { question, userAnswer, points, commentPrompt, language } = body;
@@ -35,7 +67,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Resolve model from request headers
-    const { model: languageModel } = resolveModelFromHeaders(req);
+    const { model: languageModel, modelString } = resolveModelFromHeaders(req);
+    const { providerId } = parseModelString(modelString);
 
     const isZh = language === 'zh-CN';
 
@@ -62,6 +95,13 @@ ${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${
         prompt: userPrompt,
       },
       'quiz-grade',
+      undefined,
+      undefined,
+      {
+        studentId: studentAuth.studentId,
+        providerId,
+        accessToken: studentAuth.accessToken,
+      },
     );
 
     // Parse the LLM response as JSON
@@ -89,6 +129,7 @@ ${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${
 
     return apiSuccess({ ...gradeResult });
   } catch (error) {
+    if (error instanceof ApiError) return apiErrorResponse(error);
     log.error('Error:', error);
     return apiError('INTERNAL_ERROR', 500, 'Failed to grade answer');
   }

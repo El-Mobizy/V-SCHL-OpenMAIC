@@ -5,13 +5,32 @@
  * Students @question or @judge an agent, and this endpoint generates a response.
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import type { PBLAgent, PBLIssue } from '@/lib/pbl/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 const log = createLogger('PBL Chat');
+
+function apiErrorResponse(e: ApiError): NextResponse {
+  const errorCode =
+    e.code === 'UNAUTHORIZED'
+      ? 'UNAUTHORIZED'
+      : e.code === 'RATE_LIMITED'
+        ? 'QUOTA_EXCEEDED'
+        : 'INTERNAL_ERROR';
+  return NextResponse.json(
+    { success: false as const, errorCode, error: e.detail },
+    {
+      status: e.status,
+      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
+    },
+  );
+}
 
 interface PBLChatRequest {
   message: string;
@@ -23,6 +42,14 @@ interface PBLChatRequest {
 }
 
 export async function POST(req: NextRequest) {
+  let studentAuth: { studentId: number; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponse(e);
+    throw e;
+  }
+
   try {
     const body = (await req.json()) as PBLChatRequest;
     const { message, agent, currentIssue, recentMessages, userRole, agentType } = body;
@@ -32,7 +59,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Get model config from headers
-    const { model } = resolveModelFromHeaders(req);
+    const { model, modelString } = resolveModelFromHeaders(req);
+    const { providerId } = parseModelString(modelString);
 
     // Build context for the agent, differentiating question vs judge
     let issueContext = '';
@@ -64,10 +92,18 @@ export async function POST(req: NextRequest) {
         prompt: message,
       },
       'pbl-chat',
+      undefined,
+      undefined,
+      {
+        studentId: studentAuth.studentId,
+        providerId,
+        accessToken: studentAuth.accessToken,
+      },
     );
 
     return apiSuccess({ message: result.text, agentName: agent.name });
   } catch (error) {
+    if (error instanceof ApiError) return apiErrorResponse(error);
     log.error('Error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }

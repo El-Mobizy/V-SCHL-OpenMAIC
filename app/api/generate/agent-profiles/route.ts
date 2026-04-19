@@ -5,14 +5,33 @@
  * based on stage info and scene outlines.
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 
 const log = createLogger('Agent Profiles API');
+
+function apiErrorResponse(e: ApiError): NextResponse {
+  const errorCode =
+    e.code === 'UNAUTHORIZED'
+      ? 'UNAUTHORIZED'
+      : e.code === 'RATE_LIMITED'
+        ? 'QUOTA_EXCEEDED'
+        : 'INTERNAL_ERROR';
+  return NextResponse.json(
+    { success: false as const, errorCode, error: e.detail },
+    {
+      status: e.status,
+      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
+    },
+  );
+}
 
 export const maxDuration = 120;
 
@@ -50,6 +69,14 @@ function stripCodeFences(text: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  let studentAuth: { studentId: number; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponse(e);
+    throw e;
+  }
+
   try {
     const body = (await req.json()) as RequestBody;
     const {
@@ -78,6 +105,7 @@ export async function POST(req: NextRequest) {
 
     // ── Model resolution from request headers ──
     const { model: languageModel, modelString } = resolveModelFromHeaders(req);
+    const { providerId } = parseModelString(modelString);
 
     // ── Build prompt ──
     const sceneSummary = sceneOutlines?.length
@@ -151,6 +179,13 @@ Return a JSON object with this exact structure:
         prompt: userPrompt,
       },
       'agent-profiles',
+      undefined,
+      undefined,
+      {
+        studentId: studentAuth.studentId,
+        providerId,
+        accessToken: studentAuth.accessToken,
+      },
     );
 
     // ── Parse LLM response ──
@@ -222,6 +257,7 @@ Return a JSON object with this exact structure:
 
     return apiSuccess({ agents });
   } catch (error) {
+    if (error instanceof ApiError) return apiErrorResponse(error);
     log.error('Agent profiles generation error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }

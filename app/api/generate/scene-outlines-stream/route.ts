@@ -11,7 +11,7 @@
  *   { type: 'error', error: string }
  */
 
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { streamLLM } from '@/lib/ai/llm';
 import { buildPrompt, PROMPT_IDS } from '@/lib/generation/prompts';
 import {
@@ -33,7 +33,26 @@ import type {
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 const log = createLogger('Outlines Stream');
+
+function apiErrorResponse(e: ApiError): NextResponse {
+  const errorCode =
+    e.code === 'UNAUTHORIZED'
+      ? 'UNAUTHORIZED'
+      : e.code === 'RATE_LIMITED'
+        ? 'QUOTA_EXCEEDED'
+        : 'INTERNAL_ERROR';
+  return NextResponse.json(
+    { success: false as const, errorCode, error: e.detail },
+    {
+      status: e.status,
+      ...(e.retryAfter ? { headers: { 'Retry-After': String(e.retryAfter) } } : {}),
+    },
+  );
+}
 
 export const maxDuration = 300;
 
@@ -97,11 +116,20 @@ function extractNewOutlines(buffer: string, alreadyParsed: number): SceneOutline
 }
 
 export async function POST(req: NextRequest) {
+  let studentAuth: { studentId: number; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponse(e);
+    throw e;
+  }
+
   try {
     const body = await req.json();
 
     // Get API configuration from request headers
     const { model: languageModel, modelInfo, modelString } = resolveModelFromHeaders(req);
+    const { providerId } = parseModelString(modelString);
 
     if (!body.requirements) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Requirements are required');
@@ -247,7 +275,11 @@ export async function POST(req: NextRequest) {
 
           for (let attempt = 1; attempt <= MAX_STREAM_RETRIES + 1; attempt++) {
             try {
-              const result = await streamLLM(streamParams, 'scene-outlines-stream');
+              const result = await streamLLM(streamParams, 'scene-outlines-stream', undefined, {
+                studentId: studentAuth.studentId,
+                providerId,
+                accessToken: studentAuth.accessToken,
+              });
 
               let fullText = '';
               parsedOutlines = [];

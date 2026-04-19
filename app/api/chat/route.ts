@@ -19,7 +19,6 @@ import type { ThinkingConfig } from '@/lib/types/provider';
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModel } from '@/lib/server/resolve-model';
-import { tokenCounter } from '@/lib/server/token-counter';
 import { extractUser } from '@/lib/auth/jwt';
 const log = createLogger('Chat API');
 
@@ -72,17 +71,10 @@ export async function POST(req: NextRequest) {
       return apiError('UNAUTHORIZED', 401, 'Invalid token');
     }
 
-    // Quota check (students only)
-    if (authUser.role === 'student') {
-      const quota = tokenCounter.checkQuota(authUser.id);
-      if (!quota.allowed) {
-        return apiError('QUOTA_EXCEEDED', 429, JSON.stringify({
-          error: 'quota_exceeded',
-          remaining: 0,
-          reset_date: quota.resetDate,
-        }));
-      }
-    }
+    // Quota enforcement and usage recording is handled by the callLLM/streamLLM
+    // wrapper (Task 14). This route delegates to statelessGenerate which will
+    // eventually pass metering through to the wrapper once Task 17 threads the
+    // student identity through the orchestration library.
 
     const { model: languageModel, apiKey: resolvedApiKey } = resolveModel({
       modelString: body.model,
@@ -152,17 +144,6 @@ export async function POST(req: NextRequest) {
 
           const data = `data: ${JSON.stringify(event)}\n\n`;
           await writer.write(encoder.encode(data));
-        }
-
-        // Record token usage for quota tracking
-        if (authUser.role === 'student') {
-          tokenCounter.recordUsage(
-            authUser.id,
-            body.model?.split(':')[0] ?? 'unknown',
-            body.model ?? 'unknown',
-            0, // TODO: Extract exact input token count from provider response
-            0, // TODO: Extract exact output token count from provider response
-          );
         }
 
         stopHeartbeat();
