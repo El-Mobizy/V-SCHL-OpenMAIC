@@ -16,11 +16,21 @@ export function CoursesTable({ courses }: { courses: Course[] }) {
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-left">
           <tr>
-            <th className="px-4 py-2">Title</th>
-            <th className="px-4 py-2">Department</th>
-            <th className="px-4 py-2">Program</th>
-            <th className="px-4 py-2">Level</th>
-            <th className="px-4 py-2">Objectives</th>
+            <th scope="col" className="px-4 py-2">
+              Title
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Department
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Program
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Level
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Objectives
+            </th>
           </tr>
         </thead>
         <tbody>

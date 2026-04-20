@@ -1,5 +1,5 @@
 'use client';
-import { useOptimistic, useState, useMemo } from 'react';
+import { useOptimistic, useState, useMemo, useTransition } from 'react';
 import { api } from '@/lib/api/symfony';
 import { ApiError } from '@/lib/api/errors';
 import type { SchoolBranding } from '@/lib/types/school';
@@ -17,6 +17,7 @@ export function useBrandingEditor(initial: SchoolBranding) {
   const [draft, setDraft] = useState<BrandingPatch>({});
   const [error, setError] = useState<ApiError | null>(null);
   const [isSaving, setSaving] = useState(false);
+  const [, startTransition] = useTransition();
 
   const dirty = useMemo(() => {
     return Object.entries(draft).some(
@@ -34,12 +35,11 @@ export function useBrandingEditor(initial: SchoolBranding) {
     return out;
   }, [draft, current]);
 
-  // TODO(phase-follow-up): wrap save in startTransition to get proper useOptimistic semantics
   const save = async (): Promise<boolean> => {
     if (!dirty) return false;
     setSaving(true);
     setError(null);
-    setOptimistic(patch);
+    startTransition(() => setOptimistic(patch));
     try {
       const result = await api.admin.branding.update(patch);
       setCurrent(result);
@@ -47,7 +47,6 @@ export function useBrandingEditor(initial: SchoolBranding) {
       return true;
     } catch (e) {
       setError(e instanceof ApiError ? e : new ApiError(0, 'NETWORK', String(e)));
-      // optimistic state reverts automatically after the transition finishes
       return false;
     } finally {
       setSaving(false);

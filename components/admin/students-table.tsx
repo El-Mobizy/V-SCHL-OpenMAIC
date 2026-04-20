@@ -33,12 +33,24 @@ export function StudentsTable({ students }: { students: Student[] }) {
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-left">
           <tr>
-            <th className="px-4 py-2">Matric</th>
-            <th className="px-4 py-2">Name</th>
-            <th className="px-4 py-2">Department</th>
-            <th className="px-4 py-2">Program</th>
-            <th className="px-4 py-2">Level</th>
-            <th className="px-4 py-2 text-right">View</th>
+            <th scope="col" className="px-4 py-2">
+              Matric
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Name
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Department
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Program
+            </th>
+            <th scope="col" className="px-4 py-2">
+              Level
+            </th>
+            <th scope="col" className="px-4 py-2 text-right">
+              View
+            </th>
           </tr>
         </thead>
         <tbody>
