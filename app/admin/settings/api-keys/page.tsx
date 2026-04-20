@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { useAuth } from '@/lib/contexts/auth-context';
 import { api } from '@/lib/api/symfony';
 import { ApiError } from '@/lib/api/errors';
 import type { ApiKey, ProviderCatalogEntry, SuggestedModel } from '@/lib/types/school';
@@ -59,6 +60,7 @@ function sameModelList(a: SuggestedModel[] | undefined, b: SuggestedModel[] | un
 
 export default function ApiKeysPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +68,7 @@ export default function ApiKeysPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [settingDefault, setSettingDefault] = useState<string | null>(null);
 
   // Keep the latest catalog in memory for the session. Refetched on focus and after
   // each POST/DELETE. Never persisted — backend controls staleness.
@@ -185,6 +188,23 @@ export default function ApiKeysPage() {
     });
   }
 
+  async function setAsDefault(provider: string) {
+    if (settingDefault) return;
+    setSettingDefault(provider);
+    try {
+      await api.admin.keys.setDefault({
+        provider,
+        schoolUuid: user?.school_uuid || undefined,
+      });
+      toast.success(`${provider}: set as school default`);
+      await refresh();
+    } catch (e) {
+      handleApiError(e, `${provider}: could not set as default`);
+    } finally {
+      setSettingDefault(null);
+    }
+  }
+
   async function save() {
     if (!draft) return;
     const existing = keys.find((k) => k.provider === draft.provider);
@@ -200,6 +220,7 @@ export default function ApiKeysPage() {
         api_key: trimmedKey || undefined,
         base_url: draft.base_url.trim() || undefined,
         models,
+        school_uuid: user?.school_uuid || undefined,
       });
       toast.success(
         trimmedKey ? `${draft.provider}: key saved` : `${draft.provider}: updated`,
@@ -217,7 +238,7 @@ export default function ApiKeysPage() {
   async function remove(provider: string) {
     if (!confirm(`Delete API key for ${provider}?`)) return;
     try {
-      await api.admin.keys.remove(provider);
+      await api.admin.keys.remove(provider, { schoolUuid: user?.school_uuid || undefined });
       toast.success(`${provider}: deleted`);
       refresh();
     } catch (e) {
@@ -308,7 +329,29 @@ export default function ApiKeysPage() {
 
               return (
                 <tr key={provider} className="border-t align-top">
-                  <td className="px-4 py-3 font-medium">{provider}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{provider}</span>
+                      {configured?.has_key && (
+                        configured.is_default ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary ring-1 ring-primary/30">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                            School default
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label={`Make ${provider} the school default`}
+                            onClick={() => setAsDefault(provider)}
+                            disabled={!!settingDefault}
+                            className="text-[11px] font-medium text-muted-foreground underline underline-offset-2 hover:text-primary disabled:opacity-50"
+                          >
+                            {settingDefault === provider ? 'Setting…' : 'Make default'}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-mono">
                     {configured?.has_key ? (
                       'sk-••••••••'
