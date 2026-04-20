@@ -78,9 +78,13 @@ export interface SuggestedModel {
 
 export interface ApiKey {
   provider: string;
+  /** Crockford base32 ULID identifying the owning school; present on server responses, sent on upsert/delete/setDefault. */
+  school_uuid?: string;
   api_key?: string;
   base_url?: string | null;
   models: SuggestedModel[];
+  /** Whether this (school, provider) row is the school's default. At most one row per school carries true; enforced transactionally by the backend. */
+  is_default?: boolean;
   has_key?: boolean;
   suggested_base_url?: string | null;
   suggested_models?: SuggestedModel[];
