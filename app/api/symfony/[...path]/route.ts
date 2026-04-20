@@ -53,7 +53,7 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
   }
 
   try {
-    let body: ArrayBuffer | string | undefined;
+    let body: Uint8Array | string | undefined;
     if (req.method === 'GET' || req.method === 'DELETE') {
       body = undefined;
     } else if (isJson) {
@@ -62,10 +62,11 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
         return NextResponse.json({ error: 'Content too large (max 5MB)' }, { status: 413 });
       }
     } else {
-      body = await req.arrayBuffer();
-      if (body.byteLength > MAX_BODY) {
+      const ab = await req.arrayBuffer();
+      if (ab.byteLength > MAX_BODY) {
         return NextResponse.json({ error: 'Content too large (max 5MB)' }, { status: 413 });
       }
+      body = new Uint8Array(ab);
     }
 
     // Read env inside the function so vitest stubEnv can override it (see tests/api/symfony-proxy.test.ts).
@@ -83,11 +84,16 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
       clearAuthCookies(res);
       return res;
     }
+    // Wrap a fresh Uint8Array view over the same buffer — avoids "body disturbed" on retry.
+    const retryBody =
+      body instanceof Uint8Array
+        ? new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
+        : body;
     const retryRes = await forward(
       upstreamUrl,
       req.method,
       newTokens.access_token,
-      body,
+      retryBody,
       ct || null,
     );
     const out = await passthrough(retryRes);
@@ -102,7 +108,7 @@ async function forward(
   url: string,
   method: string,
   token: string,
-  body: ArrayBuffer | string | undefined,
+  body: Uint8Array | string | undefined,
   contentType: string | null,
 ): Promise<Response> {
   return fetch(url, {

@@ -14,6 +14,9 @@ export function requireStudentId(req: NextRequest): string {
   if (!token) throw new ApiError(401, 'UNAUTHORIZED', 'No session');
   const user = extractUser(token);
   if (!user) throw new ApiError(401, 'UNAUTHORIZED', 'Invalid session');
+  if (user.role !== 'student' || !user.student_uuid) {
+    throw new ApiError(403, 'FORBIDDEN', 'Student identity required');
+  }
   return user.student_uuid;
 }
 
@@ -29,5 +32,8 @@ export function requireStudentAuth(req: NextRequest): { studentId: string; acces
   if (!accessToken) throw new ApiError(401, 'UNAUTHORIZED', 'No session');
   const user = extractUser(accessToken);
   if (!user) throw new ApiError(401, 'UNAUTHORIZED', 'Invalid session');
+  if (user.role !== 'student' || !user.student_uuid) {
+    throw new ApiError(403, 'FORBIDDEN', 'Student identity required');
+  }
   return { studentId: user.student_uuid, accessToken };
 }
