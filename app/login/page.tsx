@@ -10,7 +10,6 @@ import { useBranding } from '@/lib/hooks/use-branding';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') ?? '/dashboard';
   const { login, isLoading, error, clearError } = useAuthStore();
   const { logoUrl, schoolName } = useBranding();
 
@@ -22,9 +21,11 @@ export default function LoginPage() {
     await login(identifier, password);
 
     // Check if login succeeded (store is updated synchronously after await)
-    const { isAuthenticated } = useAuthStore.getState();
+    const { user, isAuthenticated } = useAuthStore.getState();
     if (isAuthenticated) {
-      router.push(redirect);
+      const explicit = searchParams.get('redirect');
+      const dest = explicit ?? (user?.role === 'admin' ? '/admin' : '/dashboard');
+      router.push(dest);
     }
   }
 
@@ -39,9 +40,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
 
           <Input
@@ -51,7 +50,10 @@ export default function LoginPage() {
             placeholder="Email or Matric Number"
             aria-label="Email or Matric Number"
             value={identifier}
-            onChange={(e) => { clearError(); setIdentifier(e.target.value); }}
+            onChange={(e) => {
+              clearError();
+              setIdentifier(e.target.value);
+            }}
             required
             autoFocus
           />
@@ -60,7 +62,10 @@ export default function LoginPage() {
             type="password"
             placeholder="Password"
             value={password}
-            onChange={(e) => { clearError(); setPassword(e.target.value); }}
+            onChange={(e) => {
+              clearError();
+              setPassword(e.target.value);
+            }}
             required
           />
 

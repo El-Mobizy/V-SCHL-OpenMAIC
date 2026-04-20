@@ -33,6 +33,17 @@ export function middleware(req: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
+    // Role-based redirects
+    const role = String(payload.role ?? '');
+    const { pathname } = req.nextUrl;
+
+    if (role === 'admin' && (pathname === '/' || pathname === '/dashboard')) {
+      return NextResponse.redirect(new URL('/admin', req.url));
+    }
+    if (pathname.startsWith('/admin') && role !== 'admin') {
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+
     // Inject role into request header for server components
     const response = NextResponse.next();
     response.headers.set('x-user-role', payload.role ?? '');
