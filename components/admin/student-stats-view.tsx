@@ -48,7 +48,7 @@ export function StudentStatsView({ ulid, stats }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="border-l-4 border-primary pl-3">
         <h1 className="text-2xl font-semibold">{label.primary}</h1>
         {label.secondary && <p className="text-sm text-muted-foreground">{label.secondary}</p>}
       </div>

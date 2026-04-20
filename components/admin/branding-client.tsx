@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { BrandingForm } from '@/components/admin/branding-form';
 import { BrandingUpload } from '@/components/admin/branding-upload';
-import { api } from '@/lib/api/symfony';
+import { api, resolveBrandingAssetUrl } from '@/lib/api/symfony';
 import { revalidateBranding } from '@/app/admin/settings/branding/actions';
 import type { SchoolBranding } from '@/lib/types/school';
 
@@ -27,7 +27,7 @@ export function BrandingClient({ initial }: { initial: SchoolBranding }) {
         <div className="flex flex-wrap gap-8">
           <BrandingUpload
             label="Logo"
-            currentUrl={branding.logo_url}
+            currentUrl={resolveBrandingAssetUrl(branding.logo_url)}
             uploader={api.admin.branding.uploadLogo}
             maxBytes={2 * 1024 * 1024}
             acceptMime={['image/png', 'image/jpeg', 'image/webp']}
@@ -35,7 +35,7 @@ export function BrandingClient({ initial }: { initial: SchoolBranding }) {
           />
           <BrandingUpload
             label="Favicon"
-            currentUrl={branding.favicon_url ?? ''}
+            currentUrl={resolveBrandingAssetUrl(branding.favicon_url)}
             uploader={api.admin.branding.uploadFavicon}
             maxBytes={512 * 1024}
             acceptMime={['image/png', 'image/x-icon', 'image/vnd.microsoft.icon']}

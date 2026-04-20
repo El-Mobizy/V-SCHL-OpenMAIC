@@ -4,12 +4,17 @@ import { api } from '@/lib/api/symfony';
 import { ApiError } from '@/lib/api/errors';
 import type { PaginatedResponse, Course } from '@/lib/types/school';
 
-export function useCoursesList(opts: { studentUuid?: string; page?: number; limit?: number }) {
+export function useCoursesList(opts: {
+  studentUuid?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+}) {
   const [data, setData] = useState<PaginatedResponse<Course> | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [isLoading, setLoad] = useState(false);
 
-  const { studentUuid, page, limit } = opts;
+  const { studentUuid, q, page, limit } = opts;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -18,7 +23,7 @@ export function useCoursesList(opts: { studentUuid?: string; page?: number; limi
     setError(null);
     (async () => {
       try {
-        const res = await api.courses.list({ studentUuid, page, limit });
+        const res = await api.courses.list({ studentUuid, q, page, limit });
         if (active && !controller.signal.aborted) setData(res);
       } catch (e) {
         if (!active || controller.signal.aborted) return;
@@ -31,7 +36,7 @@ export function useCoursesList(opts: { studentUuid?: string; page?: number; limi
       active = false;
       controller.abort();
     };
-  }, [studentUuid, page, limit]);
+  }, [studentUuid, q, page, limit]);
 
   return { data, error, isLoading };
 }

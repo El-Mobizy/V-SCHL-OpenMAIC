@@ -13,7 +13,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const pathname = usePathname();
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 text-sm border-b pb-2">
+      <div className="flex items-center gap-4 text-sm border-b">
         {TABS.map((t) => {
           const active = pathname === t.href || pathname.startsWith(`${t.href}/`);
           return (
@@ -22,9 +22,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               href={t.href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'transition-colors',
+                'relative pb-2 transition-colors',
                 active
-                  ? 'font-medium text-foreground'
+                  ? 'font-medium text-primary after:absolute after:left-0 after:right-0 after:-bottom-px after:h-0.5 after:bg-primary'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >

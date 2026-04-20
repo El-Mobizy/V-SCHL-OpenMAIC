@@ -19,6 +19,9 @@ export interface Course {
   program: string | null;
   level: string | null;
   thumbnail_url?: string;
+  /** Detail-only fields (guide §3.1b), absent in list responses. */
+  code?: string | null;
+  units?: number | null;
 }
 
 export interface CourseProgress {
@@ -64,12 +67,27 @@ export interface AvailableProvider {
   models: AvailableModel[];
 }
 
+export interface SuggestedModel {
+  id: string;
+  name: string;
+}
+
 export interface ApiKey {
   provider: string;
   api_key?: string;
-  base_url?: string;
-  models: string[];
+  base_url?: string | null;
+  models: SuggestedModel[];
   has_key?: boolean;
+  suggested_base_url?: string | null;
+  suggested_models?: SuggestedModel[];
+  catalog_updated_at?: string;
+}
+
+export interface ProviderCatalogEntry {
+  provider: string;
+  default_base_url: string | null;
+  suggested_models: SuggestedModel[];
+  updated_at: string;
 }
 
 export interface UsageEntry {

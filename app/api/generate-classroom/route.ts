@@ -1,15 +1,26 @@
 import { after, type NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError, apiSuccess } from '@/lib/server/api-response';
 import { type GenerateClassroomInput } from '@/lib/server/classroom-generation';
 import { runClassroomGenerationJob } from '@/lib/server/classroom-job-runner';
 import { createClassroomGenerationJob } from '@/lib/server/classroom-job-store';
 import { buildRequestOrigin } from '@/lib/server/classroom-storage';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { ApiError } from '@/lib/api/errors';
+import { parseModelString } from '@/lib/ai/providers';
+import { resolveModel } from '@/lib/server/resolve-model';
 
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  let studentAuth: { studentId: string; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
+    throw e;
+  }
+
   try {
     const rawBody = (await req.json()) as Partial<GenerateClassroomInput>;
     const body: GenerateClassroomInput = {
@@ -28,11 +39,6 @@ export async function POST(req: NextRequest) {
     };
     const { requirement } = body;
 
-    const accessToken = req.cookies.get('access_token')?.value;
-    if (!accessToken) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     if (!requirement) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: requirement');
     }
@@ -42,7 +48,15 @@ export async function POST(req: NextRequest) {
     const job = await createClassroomGenerationJob(jobId, body);
     const pollUrl = `${baseUrl}/api/generate-classroom/${jobId}`;
 
-    after(() => runClassroomGenerationJob(jobId, body, baseUrl));
+    const { modelString } = resolveModel({});
+    const { providerId } = parseModelString(modelString);
+    const metering = {
+      studentId: studentAuth.studentId,
+      providerId,
+      accessToken: studentAuth.accessToken,
+    };
+
+    after(() => runClassroomGenerationJob(jobId, body, baseUrl, metering));
 
     return apiSuccess(
       {

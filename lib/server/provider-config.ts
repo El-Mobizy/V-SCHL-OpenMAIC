@@ -470,13 +470,14 @@ async function fetchFromSymfony(): Promise<Map<string, ResolvedProviderConfig>> 
     provider: string;
     api_key?: string;
     base_url?: string;
-    models: string[];
+    models: Array<string | { id: string; name?: string }>;
     has_key?: boolean;
   }>;
   const m = new Map<string, ResolvedProviderConfig>();
   for (const k of keys) {
-    if (k.api_key)
-      m.set(k.provider, { apiKey: k.api_key, baseUrl: k.base_url, models: k.models ?? [] });
+    if (!k.api_key) continue;
+    const modelIds = (k.models ?? []).map((x) => (typeof x === 'string' ? x : x.id));
+    m.set(k.provider, { apiKey: k.api_key, baseUrl: k.base_url, models: modelIds });
   }
   return m;
 }

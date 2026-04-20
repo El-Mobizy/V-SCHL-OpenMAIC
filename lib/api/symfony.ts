@@ -7,6 +7,7 @@ import type {
   TokenQuota,
   AvailableProvider,
   ApiKey,
+  ProviderCatalogEntry,
   UsageEntry,
   PaginatedResponse,
   Student,
@@ -34,6 +35,18 @@ export async function bffUpload<T>(path: string, file: File): Promise<T> {
   return (await res.json()) as T;
 }
 
+// Branding assets (logo, favicon) are served by Symfony's public/uploads/, not Next.
+// Prepend the Symfony origin when the path is backend-hosted; pass through Next-local
+// assets (e.g. /logo-horizontal.png) and already-absolute URLs untouched.
+export function resolveBrandingAssetUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (/^(https?:|data:|blob:)/i.test(path)) return path;
+  if (path.startsWith('/uploads/')) {
+    return `${process.env.NEXT_PUBLIC_SYMFONY_API_URL ?? ''}${path}`;
+  }
+  return path;
+}
+
 export function buildQuery(opts: Record<string, string | number | undefined>): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(opts)) {
@@ -55,11 +68,21 @@ export const api = {
   },
 
   courses: {
-    list: (opts: { studentUuid?: string; page?: number; limit?: number } = {}) => {
-      const qs = buildQuery({ student: opts.studentUuid, page: opts.page, limit: opts.limit });
+    list: (
+      opts: { studentUuid?: string; q?: string; page?: number; limit?: number } = {},
+    ) => {
+      const qs = buildQuery({
+        student: opts.studentUuid,
+        q: opts.q,
+        page: opts.page,
+        limit: opts.limit,
+      });
       return bff<PaginatedResponse<Course>>(`/courses${qs ? `?${qs}` : ''}`);
     },
-    get: (courseUuid: string) => bff<Course>(`/courses/${courseUuid}`),
+    get: (courseUuid: string, studentUuid?: string) => {
+      const qs = studentUuid ? `?student=${studentUuid}` : '';
+      return bff<Course>(`/courses/${courseUuid}${qs}`);
+    },
     syllabus: {
       get: (courseUuid: string, studentUuid: string) =>
         bff<unknown>(`/courses/${courseUuid}/syllabus?student=${studentUuid}`),
@@ -100,6 +123,9 @@ export const api = {
         bff<{ ok: true }>(`/admin/api-keys`, { method: 'POST', body: JSON.stringify(k) }),
       remove: (provider: string) =>
         bff<{ ok: true }>(`/admin/api-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+    },
+    catalog: {
+      list: () => bff<ProviderCatalogEntry[]>(`/admin/provider-catalog`),
     },
     stats: () => bff<AdminStats>(`/admin/stats`),
     branding: {

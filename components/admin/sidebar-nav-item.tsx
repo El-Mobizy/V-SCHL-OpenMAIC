@@ -20,14 +20,15 @@ export function SidebarNavItem({
   return (
     <Link
       href={href}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+        'relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
         isActive
-          ? 'bg-primary/10 text-primary font-medium'
+          ? 'bg-primary/10 text-primary font-medium before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r-full before:bg-primary'
           : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
+      <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
       <span className="truncate">{label}</span>
     </Link>
   );

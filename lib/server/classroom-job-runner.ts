@@ -1,4 +1,5 @@
 import { createLogger } from '@/lib/logger';
+import type { LLMMetering } from '@/lib/ai/llm';
 import { generateClassroom, type GenerateClassroomInput } from '@/lib/server/classroom-generation';
 import {
   markClassroomGenerationJobFailed,
@@ -14,6 +15,7 @@ export function runClassroomGenerationJob(
   jobId: string,
   input: GenerateClassroomInput,
   baseUrl: string,
+  metering?: LLMMetering,
 ): Promise<void> {
   const existing = runningJobs.get(jobId);
   if (existing) {
@@ -29,6 +31,7 @@ export function runClassroomGenerationJob(
         onProgress: async (progress) => {
           await updateClassroomGenerationJobProgress(jobId, progress);
         },
+        metering,
       });
 
       await markClassroomGenerationJobSucceeded(jobId, result);

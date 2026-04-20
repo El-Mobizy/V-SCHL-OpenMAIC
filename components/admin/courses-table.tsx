@@ -12,8 +12,8 @@ export function CoursesTable({ courses }: { courses: Course[] }) {
   }
 
   return (
-    <div className="border rounded-md overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="border rounded-md overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
         <thead className="bg-muted/50 text-left">
           <tr>
             <th scope="col" className="px-4 py-2">

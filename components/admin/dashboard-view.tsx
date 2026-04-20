@@ -18,7 +18,9 @@ export function DashboardView({ initial }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Platform overview</h1>
+        <h1 className="text-xl font-semibold border-l-4 border-primary pl-3">
+          Platform overview
+        </h1>
         <Button
           variant="outline"
           size="sm"

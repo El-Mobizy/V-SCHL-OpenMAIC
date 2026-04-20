@@ -33,7 +33,7 @@ export default function StudentsPage() {
   return (
     <div className="space-y-4">
       <header className="flex items-center justify-between">
-        <div>
+        <div className="border-l-4 border-primary pl-3">
           <h1 className="text-2xl font-semibold">Students</h1>
           {data && (
             <p className="text-sm text-muted-foreground">

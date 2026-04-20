@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
-import { callLLM } from '@/lib/ai/llm';
+import { callLLM, type LLMMetering } from '@/lib/ai/llm';
+import { tokenCounter } from '@/lib/server/token-counter';
 import { createStageAPI } from '@/lib/api/stage-api';
 import type { StageStore } from '@/lib/api/stage-api-types';
 import {
@@ -164,6 +165,7 @@ export async function generateClassroom(
   options: {
     baseUrl: string;
     onProgress?: (progress: ClassroomGenerationProgress) => Promise<void> | void;
+    metering?: LLMMetering;
   },
 ): Promise<GenerateClassroomResult> {
   const { requirement, pdfContent } = input;
@@ -199,6 +201,9 @@ export async function generateClassroom(
         maxOutputTokens: modelInfo?.outputWindow,
       },
       'generate-classroom',
+      undefined,
+      undefined,
+      options.metering,
     );
     return result.text;
   };
@@ -417,6 +422,14 @@ export async function generateClassroom(
   );
 
   log.info(`Classroom persisted: ${persisted.id}, URL: ${persisted.url}`);
+
+  if (options.metering) {
+    try {
+      await tokenCounter.flushUsage(options.metering.studentId);
+    } catch (e) {
+      log.warn('Token usage flush failed (will retry on next LLM call):', e);
+    }
+  }
 
   await options.onProgress?.({
     step: 'completed',
