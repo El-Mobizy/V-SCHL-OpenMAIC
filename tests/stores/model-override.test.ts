@@ -18,18 +18,18 @@ describe('model-override store', () => {
   });
 
   it('persists and reads an override', () => {
-    setModelOverride(studentId, 'anthropic/claude-opus-4-7');
-    expect(getModelOverride(studentId)).toBe('anthropic/claude-opus-4-7');
+    setModelOverride(studentId, 'anthropic:claude-opus-4-7');
+    expect(getModelOverride(studentId)).toBe('anthropic:claude-opus-4-7');
   });
 
   it('is scoped per student', () => {
-    setModelOverride(studentId, 'openai/gpt-4o-mini');
-    setModelOverride('01HSTUDENTXX1111111111111X', 'anthropic/claude-sonnet-4-6');
-    expect(getModelOverride(studentId)).toBe('openai/gpt-4o-mini');
+    setModelOverride(studentId, 'openai:gpt-4o-mini');
+    setModelOverride('01HSTUDENTXX1111111111111X', 'anthropic:claude-sonnet-4-6');
+    expect(getModelOverride(studentId)).toBe('openai:gpt-4o-mini');
   });
 
   it('clears an override', () => {
-    setModelOverride(studentId, 'openai/gpt-4o-mini');
+    setModelOverride(studentId, 'openai:gpt-4o-mini');
     clearModelOverride(studentId);
     expect(getModelOverride(studentId)).toBeNull();
   });
@@ -39,7 +39,7 @@ describe('model-override store', () => {
   });
 
   it('is a no-op without a studentId', () => {
-    setModelOverride('', 'openai/gpt-4o-mini');
+    setModelOverride('', 'openai:gpt-4o-mini');
     expect(getModelOverride('')).toBeNull();
   });
 });

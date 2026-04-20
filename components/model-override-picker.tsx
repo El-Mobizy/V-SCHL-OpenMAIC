@@ -25,7 +25,7 @@ export function ModelOverridePicker() {
   }, [user?.student_uuid]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.role !== 'student') return;
     api.providers
       .list()
       .then(setProviders)

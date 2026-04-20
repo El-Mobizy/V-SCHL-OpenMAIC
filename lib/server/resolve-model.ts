@@ -11,7 +11,7 @@ import { resolveApiKey, resolveBaseUrl, resolveProxy } from '@/lib/server/provid
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
 
 export interface ResolvedModel extends ModelWithInfo {
-  /** Original model string (e.g. "openai/gpt-4o-mini") */
+  /** Original model string (e.g. "openai:gpt-4o-mini") */
   modelString: string;
   /** Effective API key after server-side fallback resolution */
   apiKey: string;
