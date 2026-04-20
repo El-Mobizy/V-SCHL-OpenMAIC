@@ -6,7 +6,7 @@ async function fetchStats(accessToken: string): Promise<AdminStats | null> {
   try {
     const res = await fetch(`${process.env.SYMFONY_API_URL}/api/admin/stats`, {
       headers: { Authorization: `Bearer ${accessToken}` },
-      next: { revalidate: 60 },
+      cache: 'no-store',
     });
     if (!res.ok) return null;
     return (await res.json()) as AdminStats;

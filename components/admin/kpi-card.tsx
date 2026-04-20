@@ -24,7 +24,14 @@ export function KpiCard({
         <Icon className="h-4 w-4" />
         <span>{label}</span>
       </div>
-      <div className="text-2xl font-semibold" aria-label={`${formatted} ${label.toLowerCase()}`}>
+      <div
+        className="text-2xl font-semibold"
+        aria-label={
+          value === undefined || value === null
+            ? `${label} unavailable`
+            : `${formatted} ${label.toLowerCase()}`
+        }
+      >
         {formatted}
       </div>
       {sublabel && <div className="text-xs text-muted-foreground">{sublabel}</div>}

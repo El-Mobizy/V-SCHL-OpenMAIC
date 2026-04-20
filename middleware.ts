@@ -35,7 +35,6 @@ export function middleware(req: NextRequest) {
 
     // Role-based redirects
     const role = String(payload.role ?? '');
-    const { pathname } = req.nextUrl;
 
     if (role === 'admin' && (pathname === '/' || pathname === '/dashboard')) {
       return NextResponse.redirect(new URL('/admin', req.url));
