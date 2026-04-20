@@ -44,7 +44,7 @@ export function BrandingUpload({
     try {
       const result = await uploader(file);
       setUploadError(null);
-      toast.success('Logo updated');
+      toast.success(`${label} updated`);
       onSuccess?.(result);
     } catch (e) {
       if (e instanceof ApiError) {
@@ -82,6 +82,7 @@ export function BrandingUpload({
         ref={inputRef}
         type="file"
         accept={acceptMime.join(',')}
+        aria-label={label}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

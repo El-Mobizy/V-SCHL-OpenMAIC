@@ -27,8 +27,9 @@ describe('MatricFilter', () => {
     const onChange = vi.fn();
     const user = userEvent.setup({ delay: null });
     render(<MatricFilter initial="CS101" onDebouncedChange={onChange} delayMs={20} />);
-    // Wait for initial mount debounce
+    // Mount should NOT fire callback — wait past the delay to confirm
     await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(onChange).not.toHaveBeenCalled();
     onChange.mockClear();
 
     const clearBtn = screen.getAllByRole('button', { name: /clear filter/i })[0];
@@ -37,5 +38,13 @@ describe('MatricFilter', () => {
     const input = screen.getByRole('textbox');
     expect((input as HTMLInputElement).value).toBe('');
     expect(onChange).toHaveBeenLastCalledWith('');
+  }, 10000);
+
+  it('does not fire callback on mount when initial is set', async () => {
+    const onChange = vi.fn();
+    render(<MatricFilter initial="CS" onDebouncedChange={onChange} delayMs={20} />);
+    // Wait well past the debounce window
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    expect(onChange).not.toHaveBeenCalled();
   }, 10000);
 });

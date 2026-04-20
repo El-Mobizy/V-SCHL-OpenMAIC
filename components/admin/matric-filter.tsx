@@ -14,15 +14,22 @@ export function MatricFilter({
   delayMs?: number;
 }) {
   const [value, setValue] = useState(initial);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const cbRef = useRef(onDebouncedChange);
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => onDebouncedChange(value), delayMs);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [value, delayMs, onDebouncedChange]);
+    cbRef.current = onDebouncedChange;
+  });
+
+  // Skip the firing of the effect on the very first render so we don't issue a
+  // redundant navigation when the URL already encodes the initial value.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    const id = setTimeout(() => cbRef.current(value), delayMs);
+    return () => clearTimeout(id);
+  }, [value, delayMs]);
 
   return (
     <div className="flex items-center gap-2 max-w-sm">

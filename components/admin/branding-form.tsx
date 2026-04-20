@@ -3,10 +3,16 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBrandingEditor } from '@/lib/hooks/use-branding-editor';
+import { revalidateBranding } from '@/app/admin/settings/branding/actions';
 import { cn } from '@/lib/utils';
 import type { SchoolBranding } from '@/lib/types/school';
 
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
+
+// Derive a stable id string from the label for htmlFor / id association
+function toInputId(label: string) {
+  return `color-${label.toLowerCase().replace(/\s+/g, '-')}`;
+}
 
 function ColorRow({
   label,
@@ -19,6 +25,7 @@ function ColorRow({
 }) {
   const [textVal, setTextVal] = useState(value);
   const [invalid, setInvalid] = useState(false);
+  const inputId = toInputId(label);
 
   const commit = (v: string) => {
     if (HEX_RE.test(v)) {
@@ -31,8 +38,11 @@ function ColorRow({
 
   return (
     <div className="flex items-center gap-3">
-      <label className="w-36 text-sm font-medium shrink-0">{label}</label>
+      <label htmlFor={inputId} className="w-36 text-sm font-medium shrink-0">
+        {label}
+      </label>
       <input
+        id={inputId}
         type="color"
         value={HEX_RE.test(textVal) ? textVal : '#000000'}
         onChange={(e) => {
@@ -67,6 +77,17 @@ export function BrandingForm({ initial }: { initial: SchoolBranding }) {
     secondary_color: (draft.secondary_color ?? current.secondary_color) || '#ffffff',
     accent_color: (draft.accent_color ?? current.accent_color) || '#0000ff',
   };
+
+  async function handleSave() {
+    const ok = await save();
+    if (ok) {
+      try {
+        await revalidateBranding();
+      } catch (err) {
+        console.warn('[branding] revalidateBranding failed after save:', err);
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -128,7 +149,7 @@ export function BrandingForm({ initial }: { initial: SchoolBranding }) {
         </div>
       )}
 
-      <Button onClick={save} disabled={!dirty || isSaving}>
+      <Button onClick={handleSave} disabled={!dirty || isSaving}>
         {isSaving ? 'Saving…' : 'Save changes'}
       </Button>
     </div>
