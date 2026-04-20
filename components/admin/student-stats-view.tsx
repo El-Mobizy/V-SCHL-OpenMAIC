@@ -24,6 +24,13 @@ function Card({ title, value, sub }: { title: string; value: string; sub?: strin
   );
 }
 
+const numFmt = new Intl.NumberFormat('en-GB');
+const dateFmt = new Intl.DateTimeFormat('en-GB', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 export function StudentStatsView({ ulid, stats }: Props) {
   const { push } = useRecentStudents();
   const [label, setLabel] = useState<{ primary: string; secondary?: string }>({
@@ -61,8 +68,8 @@ export function StudentStatsView({ ulid, stats }: Props) {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card
             title="Token quota"
-            value={stats.tokens_used.toLocaleString()}
-            sub={`of ${stats.tokens_max.toLocaleString()} (resets ${stats.tokens_reset_date})`}
+            value={numFmt.format(stats.tokens_used)}
+            sub={`of ${numFmt.format(stats.tokens_max)} (resets ${stats.tokens_reset_date})`}
           />
           <Card
             title="Course activity"
@@ -71,14 +78,14 @@ export function StudentStatsView({ ulid, stats }: Props) {
           />
           <Card
             title="This month"
-            value={stats.tokens_this_month.toLocaleString()}
+            value={numFmt.format(stats.tokens_this_month)}
             sub="tokens used"
           />
           <Card
             title="Last activity"
             value={
               stats.last_activity_at
-                ? new Date(stats.last_activity_at).toLocaleDateString()
+                ? dateFmt.format(new Date(stats.last_activity_at))
                 : 'No activity yet'
             }
           />

@@ -7,7 +7,7 @@ import { api } from '@/lib/api/symfony';
 import { ApiError } from '@/lib/api/errors';
 import type { Course, CourseProgress } from '@/lib/types/school';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, List, ArrowRight, CheckCircle2, Sparkles, BookOpen } from 'lucide-react';
+import { LayoutGrid, List, ArrowRight, CheckCircle2, Sparkles, BookOpen, PlayCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'card' | 'list';
@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [progress, setProgress] = useState<Record<string, CourseProgress>>({});
+  const [readyCourses, setReadyCourses] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('card');
 
@@ -60,16 +61,29 @@ export default function DashboardPage() {
         setCourses(courseList);
 
         const progressMap: Record<string, CourseProgress> = {};
+        const ready = new Set<string>();
         await Promise.all(
-          courseList.map(async (c) => {
-            try {
-              progressMap[c.uuid] = await api.courses.progress.get(user.student_uuid, c.uuid);
-            } catch (e) {
-              if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
-            }
-          }),
+          courseList.flatMap((c) => [
+            api.courses.progress
+              .get(user.student_uuid, c.uuid)
+              .then((p) => {
+                progressMap[c.uuid] = p;
+              })
+              .catch((e) => {
+                if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
+              }),
+            api.courses.syllabus
+              .get(c.uuid, user.student_uuid)
+              .then(() => {
+                ready.add(c.uuid);
+              })
+              .catch((e) => {
+                if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
+              }),
+          ]),
         );
         setProgress(progressMap);
+        setReadyCourses(ready);
       } catch (err) {
         console.error('Failed to load courses:', err);
       } finally {
@@ -142,6 +156,7 @@ export default function DashboardPage() {
               : 0;
             const hasStarted = !!p;
             const isComplete = hasStarted && progressPercent >= 100;
+            const isReady = !hasStarted && readyCourses.has(course.uuid);
             const initials = courseInitials(course.title);
 
             const go = () => router.push(`/course/${course.uuid}`);
@@ -189,7 +204,9 @@ export default function DashboardPage() {
                         ? 'bg-green-500/15 text-green-700 dark:text-green-400 ring-1 ring-green-500/30'
                         : hasStarted
                           ? 'bg-primary/15 text-primary ring-1 ring-primary/30'
-                          : 'bg-background/80 text-muted-foreground ring-1 ring-border',
+                          : isReady
+                            ? 'bg-primary/10 text-primary ring-1 ring-primary/25'
+                            : 'bg-background/80 text-muted-foreground ring-1 ring-border',
                     )}
                   >
                     {isComplete ? (
@@ -199,6 +216,11 @@ export default function DashboardPage() {
                       </>
                     ) : hasStarted ? (
                       'In progress'
+                    ) : isReady ? (
+                      <>
+                        <PlayCircle className="h-3 w-3" />
+                        Ready
+                      </>
                     ) : (
                       <>
                         <Sparkles className="h-3 w-3" />
@@ -228,17 +250,27 @@ export default function DashboardPage() {
                         />
                       </div>
                     </div>
+                  ) : isReady ? (
+                    <div className="mt-auto text-xs text-primary/90">Classroom ready to open</div>
                   ) : (
                     <div className="mt-auto text-xs text-muted-foreground">Not started yet</div>
                   )}
 
                   <Button
-                    variant={hasStarted && !isComplete ? 'default' : 'outline'}
+                    variant={(hasStarted && !isComplete) || isReady ? 'default' : 'outline'}
                     size="sm"
                     onClick={go}
                     className="mt-1 w-full justify-between"
                   >
-                    <span>{isComplete ? 'Review' : hasStarted ? 'Continue' : 'Start learning'}</span>
+                    <span>
+                      {isComplete
+                        ? 'Review'
+                        : hasStarted
+                          ? 'Continue'
+                          : isReady
+                            ? 'Open classroom'
+                            : 'Start learning'}
+                    </span>
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </Button>
                 </div>
@@ -257,6 +289,7 @@ export default function DashboardPage() {
               ? Math.round((p.completed_scenes.length / p.total_scenes) * 100)
               : 0;
             const hasStarted = !!p;
+            const isReady = !hasStarted && readyCourses.has(course.uuid);
 
             return (
               <li
@@ -280,6 +313,11 @@ export default function DashboardPage() {
                         {progressPercent}%
                       </span>
                     </>
+                  ) : isReady ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-primary">
+                      <PlayCircle className="h-3 w-3" />
+                      Ready
+                    </span>
                   ) : (
                     <span className="text-xs text-muted-foreground">Not started</span>
                   )}
@@ -289,7 +327,7 @@ export default function DashboardPage() {
                   className="shrink-0"
                   onClick={() => router.push(`/course/${course.uuid}`)}
                 >
-                  {hasStarted ? 'Continue' : 'Start'}
+                  {hasStarted ? 'Continue' : isReady ? 'Open' : 'Start'}
                 </Button>
               </li>
             );
