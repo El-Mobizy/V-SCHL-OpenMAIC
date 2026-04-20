@@ -8,6 +8,7 @@ import { LogOut, Sun, Moon, Monitor } from 'lucide-react';
 import { useBranding } from '@/lib/hooks/use-branding';
 import { useTheme } from '@/lib/hooks/use-theme';
 import { SiteFooter } from '@/components/site-footer';
+import { ModelOverridePicker } from '@/components/model-override-picker';
 
 const THEME_CYCLE = ['light', 'dark', 'system'] as const;
 
@@ -44,6 +45,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <span className="text-sm text-muted-foreground hidden sm:inline">
             {user?.name} ({user?.role})
           </span>
+          <ModelOverridePicker />
           <Button
             variant="ghost"
             size="icon"

@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useStageStore } from '@/lib/store/stage';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useExportPPTX } from '@/lib/export/use-export-pptx';
+import { ModelOverridePicker } from '@/components/model-override-picker';
 
 interface HeaderProps {
   readonly currentSceneTitle: string;
@@ -99,6 +100,8 @@ export function Header({ currentSceneTitle }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-gray-100/50 dark:border-gray-700/50 shadow-sm shrink-0">
+          <ModelOverridePicker />
+          <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
           {/* Language Selector */}
           <div className="relative" ref={languageRef}>
             <button
