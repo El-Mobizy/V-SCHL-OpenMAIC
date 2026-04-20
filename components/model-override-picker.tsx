@@ -47,7 +47,7 @@ export function ModelOverridePicker() {
   };
 
   const label = override
-    ? override.split('/').slice(-1)[0]
+    ? override.split(':').slice(-1)[0]
     : 'Default model';
 
   return (
@@ -86,7 +86,7 @@ export function ModelOverridePicker() {
                 {p.name}
               </div>
               {p.models.map((m) => {
-                const modelString = `${p.id}/${m.id}`;
+                const modelString = `${p.id}:${m.id}`;
                 const active = override === modelString;
                 return (
                   <button

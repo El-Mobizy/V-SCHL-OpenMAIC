@@ -27,10 +27,10 @@ describe('resolveClassroomModelString', () => {
   it('returns the client override verbatim when provided', async () => {
     mockSymfonyResponse([{ provider: 'openai', is_default: true, models: [{ id: 'gpt-5.4' }] }]);
     const out = await resolveClassroomModelString({
-      clientOverride: 'anthropic/claude-opus-4-7',
+      clientOverride: 'anthropic:claude-opus-4-7',
       accessToken: 'tok',
     });
-    expect(out).toBe('anthropic/claude-opus-4-7');
+    expect(out).toBe('anthropic:claude-opus-4-7');
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -40,7 +40,7 @@ describe('resolveClassroomModelString', () => {
       { provider: 'anthropic', is_default: true, models: [{ id: 'claude-opus-4-7' }, { id: 'claude-sonnet-4-6' }] },
     ]);
     const out = await resolveClassroomModelString({ accessToken: 'tok' });
-    expect(out).toBe('anthropic/claude-opus-4-7');
+    expect(out).toBe('anthropic:claude-opus-4-7');
   });
 
   it('falls back to first configured provider models[0].id when no row is flagged', async () => {
@@ -49,26 +49,26 @@ describe('resolveClassroomModelString', () => {
       { provider: 'anthropic', is_default: false, models: [{ id: 'claude-opus-4-7' }] },
     ]);
     const out = await resolveClassroomModelString({ accessToken: 'tok' });
-    expect(out).toBe('openai/gpt-4o-mini');
+    expect(out).toBe('openai:gpt-4o-mini');
   });
 
   it('falls back to DEFAULT_MODEL env when Symfony returns empty', async () => {
     mockSymfonyResponse([]);
-    process.env.DEFAULT_MODEL = 'google/gemini-2.5-flash';
+    process.env.DEFAULT_MODEL = 'google:gemini-2.5-flash';
     const out = await resolveClassroomModelString({ accessToken: 'tok' });
-    expect(out).toBe('google/gemini-2.5-flash');
+    expect(out).toBe('google:gemini-2.5-flash');
   });
 
   it('falls back to DEFAULT_MODEL when Symfony errors', async () => {
     mockSymfonyError();
-    process.env.DEFAULT_MODEL = 'google/gemini-2.5-flash';
+    process.env.DEFAULT_MODEL = 'google:gemini-2.5-flash';
     const out = await resolveClassroomModelString({ accessToken: 'tok' });
-    expect(out).toBe('google/gemini-2.5-flash');
+    expect(out).toBe('google:gemini-2.5-flash');
   });
 
-  it('final fallback is openai/gpt-4o-mini', async () => {
+  it('final fallback is openai:gpt-4o-mini', async () => {
     mockSymfonyError();
     const out = await resolveClassroomModelString({ accessToken: 'tok' });
-    expect(out).toBe('openai/gpt-4o-mini');
+    expect(out).toBe('openai:gpt-4o-mini');
   });
 });

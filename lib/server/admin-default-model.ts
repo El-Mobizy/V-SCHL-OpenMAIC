@@ -8,7 +8,7 @@ interface AdminKeyRow {
   models?: Array<{ id: string }>;
 }
 
-const FINAL_FALLBACK = 'openai/gpt-4o-mini';
+const FINAL_FALLBACK = 'openai:gpt-4o-mini';
 
 async function fetchAdminKeys(accessToken: string): Promise<AdminKeyRow[]> {
   const base = process.env.SYMFONY_API_URL;
@@ -29,7 +29,7 @@ async function fetchAdminKeys(accessToken: string): Promise<AdminKeyRow[]> {
 function modelStringFor(row: AdminKeyRow): string | null {
   const firstModelId = row.models?.[0]?.id;
   if (!firstModelId) return null;
-  return `${row.provider}/${firstModelId}`;
+  return `${row.provider}:${firstModelId}`;
 }
 
 function pickAdminDefault(rows: AdminKeyRow[]): string | null {
@@ -50,7 +50,7 @@ export async function resolveClassroomModelString({
   clientOverride?: string;
   accessToken: string;
 }): Promise<string> {
-  if (clientOverride && clientOverride.includes('/')) {
+  if (clientOverride && clientOverride.includes(':')) {
     return clientOverride;
   }
   const rows = await fetchAdminKeys(accessToken);

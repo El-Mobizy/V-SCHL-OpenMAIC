@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeCourseHtml } from '@/lib/utils/sanitize-html';
+import { getModelOverride } from '@/lib/stores/model-override';
 
 type ViewState = 'loading' | 'error' | 'generating' | 'ready' | 'configuring';
 type SyllabusRef = { classroomId: string };
@@ -201,6 +202,8 @@ export default function CourseViewerPage() {
         `Objectives:\n${course.objectives ?? 'No objectives set.'}\n\n` +
         contextBlock;
 
+      const modelString = user.student_uuid ? getModelOverride(user.student_uuid) : null;
+
       const res = await fetch('/api/generate-classroom', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,6 +211,7 @@ export default function CourseViewerPage() {
           requirement,
           language: 'en-US',
           enableImageGeneration: styleMeta.enableImages,
+          ...(modelString ? { modelString } : {}),
         }),
         signal: abort.signal,
       });

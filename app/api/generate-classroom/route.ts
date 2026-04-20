@@ -8,7 +8,7 @@ import { buildRequestOrigin } from '@/lib/server/classroom-storage';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { ApiError } from '@/lib/api/errors';
 import { parseModelString } from '@/lib/ai/providers';
-import { resolveModel } from '@/lib/server/resolve-model';
+import { resolveClassroomModelString } from '@/lib/server/admin-default-model';
 
 export const maxDuration = 30;
 
@@ -23,8 +23,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = (await req.json()) as Partial<GenerateClassroomInput>;
+
+    const modelString = await resolveClassroomModelString({
+      clientOverride: rawBody.modelString,
+      accessToken: studentAuth.accessToken,
+    });
+
     const body: GenerateClassroomInput = {
       requirement: rawBody.requirement || '',
+      modelString,
       ...(rawBody.pdfContent ? { pdfContent: rawBody.pdfContent } : {}),
       ...(rawBody.language ? { language: rawBody.language } : {}),
       ...(rawBody.enableWebSearch != null ? { enableWebSearch: rawBody.enableWebSearch } : {}),
@@ -48,7 +55,6 @@ export async function POST(req: NextRequest) {
     const job = await createClassroomGenerationJob(jobId, body);
     const pollUrl = `${baseUrl}/api/generate-classroom/${jobId}`;
 
-    const { modelString } = resolveModel({});
     const { providerId } = parseModelString(modelString);
     const metering = {
       studentId: studentAuth.studentId,
