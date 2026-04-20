@@ -64,6 +64,14 @@ const UNDERSTANDING_OPTIONS: Array<{ value: UnderstandingLevel; label: string; h
   { value: 'strong', label: 'Strong', hint: 'Comfortable — want depth' },
 ];
 
+const WEAKEST_AREA_QUICK_FILLS: string[] = [
+  'I have zero knowledge',
+  'The first part of the course',
+  'Core concepts and terminology',
+  'Practical applications',
+  'Advanced or later topics',
+];
+
 function understandingLabel(v: UnderstandingLevel): string {
   return UNDERSTANDING_OPTIONS.find((o) => o.value === v)?.label ?? v;
 }
@@ -940,8 +948,27 @@ function ContextForm({
             placeholder="e.g. recursion, normalization, balancing equations…"
             className="w-full resize-none rounded-xl border bg-background px-3.5 py-2.5 text-sm leading-relaxed placeholder:text-muted-foreground/70 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
-          <div className="flex justify-end">
-            <span className="text-[10px] text-muted-foreground tabular-nums">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {WEAKEST_AREA_QUICK_FILLS.map((q) => {
+              const active = weakestArea === q;
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setWeakestArea(active ? '' : q)}
+                  aria-pressed={active}
+                  className={cn(
+                    'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] transition-colors',
+                    active
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                  )}
+                >
+                  {q}
+                </button>
+              );
+            })}
+            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums">
               {weakestArea.length}/400
             </span>
           </div>
