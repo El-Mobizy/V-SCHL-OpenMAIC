@@ -29,5 +29,7 @@ export function extractUser(token: string): SchoolUser | null {
     program: String(p.program ?? ''),
     level: String(p.level ?? ''),
     student_uuid: String(p.student_uuid ?? ''),
+    school_uuid: String(p.school_uuid ?? ''),
+    school_name: String(p.school_name ?? ''),
   };
 }

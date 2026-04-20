@@ -60,6 +60,8 @@ describe('extractUser', () => {
       program: 'BSc',
       level: 'L2',
       student_uuid: '01HZQK0123456789ABCDEFGHJK',
+      school_uuid: '',
+      school_name: '',
     });
   });
 
@@ -79,5 +81,37 @@ describe('extractUser', () => {
     });
     const user = extractUser(token);
     expect(user?.student_uuid).toBe('');
+  });
+});
+
+describe('extractUser — 2026-04-20 claims', () => {
+  it('populates school_uuid and school_name from JWT', () => {
+    const token = fakeJwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      email: 'a@b.c',
+      name: 'A B',
+      role: 'student',
+      department: 'CS',
+      program: 'BSc',
+      level: 'L2',
+      student_uuid: '01HSTUDENT00000000000000AB',
+      school_uuid: '01HSCHOOL0000000000000000AA',
+      school_name: 'Test School',
+    });
+    const u = extractUser(token);
+    expect(u?.school_uuid).toBe('01HSCHOOL0000000000000000AA');
+    expect(u?.school_name).toBe('Test School');
+  });
+
+  it('defaults school_uuid/school_name to empty string when missing', () => {
+    const token = fakeJwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      email: 'a@b.c',
+      name: 'A B',
+      role: 'admin',
+    });
+    const u = extractUser(token);
+    expect(u?.school_uuid).toBe('');
+    expect(u?.school_name).toBe('');
   });
 });

@@ -7,6 +7,10 @@ export interface SchoolUser {
   level: string;
   /** Crockford base32 ULID; empty string for non-students per guide §1. */
   student_uuid: string;
+  /** Crockford base32 ULID identifying the school; empty string for tokens issued before 2026-04-20. */
+  school_uuid: string;
+  /** Display name of the school; empty string for tokens issued before 2026-04-20. */
+  school_name: string;
 }
 
 export interface Course {
