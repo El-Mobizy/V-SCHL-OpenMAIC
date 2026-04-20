@@ -36,7 +36,7 @@ export type { ThinkingConfig } from '@/lib/types/provider';
  * Omit to preserve the original, un-metered behavior.
  */
 export interface LLMMetering {
-  studentId: number;
+  studentId: string;
   providerId: ProviderId;
   /** The student's JWT access token — used to lazy-hydrate the quota cache
    *  on miss (e.g. after server restart or on a refresh path). Server-to-server only. */
@@ -474,7 +474,12 @@ export async function streamLLM<T extends StreamTextParams>(
       ...params,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       onFinish: (ev: any) => {
-        recordUsageFor(metering, modelId, ev?.totalUsage?.inputTokens, ev?.totalUsage?.outputTokens);
+        recordUsageFor(
+          metering,
+          modelId,
+          ev?.totalUsage?.inputTokens,
+          ev?.totalUsage?.outputTokens,
+        );
         return origOnFinish?.(ev);
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

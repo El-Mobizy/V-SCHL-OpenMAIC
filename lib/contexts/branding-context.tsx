@@ -19,7 +19,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    api.school.branding()
+    api.school
+      .branding()
       .then((data) => {
         setBranding(data);
         // Apply CSS variable overrides
@@ -37,9 +38,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <BrandingContext.Provider value={{ branding, isLoaded }}>
-      {children}
-    </BrandingContext.Provider>
+    <BrandingContext.Provider value={{ branding, isLoaded }}>{children}</BrandingContext.Provider>
   );
 }
 

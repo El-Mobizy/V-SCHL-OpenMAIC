@@ -1,7 +1,15 @@
 export type ApiErrorCode =
-  | 'UNAUTHORIZED' | 'FORBIDDEN' | 'SUSPENDED'
-  | 'NOT_FOUND'    | 'RATE_LIMITED' | 'PAYLOAD_TOO_LARGE'
-  | 'VALIDATION'   | 'NOT_CONFIGURED' | 'SERVER' | 'NETWORK';
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'SUSPENDED'
+  | 'NOT_FOUND'
+  | 'RATE_LIMITED'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'VALIDATION'
+  | 'NOT_CONFIGURED'
+  | 'SERVER'
+  | 'NETWORK'
+  | 'UNSUPPORTED_MEDIA_TYPE';
 
 export class ApiError extends Error {
   constructor(
@@ -33,6 +41,8 @@ export async function toApiError(res: Response): Promise<ApiError> {
   }
   if (res.status === 404) return new ApiError(404, 'NOT_FOUND', msg || 'Not found');
   if (res.status === 413) return new ApiError(413, 'PAYLOAD_TOO_LARGE', msg || 'Too large');
+  if (res.status === 415)
+    return new ApiError(415, 'UNSUPPORTED_MEDIA_TYPE', msg || 'Unsupported media type');
   if (res.status === 429) {
     const retryAfter = Number(res.headers.get('retry-after') ?? 0) || undefined;
     return new ApiError(429, 'RATE_LIMITED', msg || 'Rate limited', retryAfter);

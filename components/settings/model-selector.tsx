@@ -236,7 +236,7 @@ export function ModelSelector({
             const filteredCount = getFilteredModelsForProvider(provider.id).length;
             const totalCount = studentMode
               ? (availableProviders.find((p) => p.id === provider.id)?.models?.length ?? 0)
-              : (providersConfig[provider.id]?.models?.length || 0);
+              : providersConfig[provider.id]?.models?.length || 0;
             const isActive = effectiveProvider === provider.id;
 
             return (

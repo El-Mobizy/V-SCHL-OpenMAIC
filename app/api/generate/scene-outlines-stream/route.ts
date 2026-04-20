@@ -100,7 +100,7 @@ function extractNewOutlines(buffer: string, alreadyParsed: number): SceneOutline
 }
 
 export async function POST(req: NextRequest) {
-  let studentAuth: { studentId: number; accessToken: string };
+  let studentAuth: { studentId: string; accessToken: string };
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {

@@ -209,7 +209,9 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
   const setASRProvider = useSettingsStore((state) => state.setASRProvider);
 
   // Navigation
-  const [activeSection, setActiveSection] = useState<SettingsSection>(isAdmin ? 'providers' : 'general');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(
+    isAdmin ? 'providers' : 'general',
+  );
   const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>(providerId);
   const [selectedPdfProviderId, setSelectedPdfProviderId] = useState<PDFProviderId>(pdfProviderId);
   const [selectedWebSearchProviderId, setSelectedWebSearchProviderId] =
@@ -1008,8 +1010,12 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               {isAdmin && activeSection === 'video' && (
                 <VideoSettings selectedProviderId={selectedVideoProviderId} />
               )}
-              {isAdmin && activeSection === 'tts' && <TTSSettings selectedProviderId={ttsProviderId} />}
-              {isAdmin && activeSection === 'asr' && <ASRSettings selectedProviderId={asrProviderId} />}
+              {isAdmin && activeSection === 'tts' && (
+                <TTSSettings selectedProviderId={ttsProviderId} />
+              )}
+              {isAdmin && activeSection === 'asr' && (
+                <ASRSettings selectedProviderId={asrProviderId} />
+              )}
             </div>
 
             {/* Footer */}

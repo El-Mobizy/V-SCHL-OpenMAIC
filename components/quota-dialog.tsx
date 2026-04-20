@@ -26,19 +26,21 @@ export function QuotaDialog({ open, resetDate, onDismiss }: QuotaDialogProps) {
             You&apos;ve used all your available tokens for this period.
             {resetDate && (
               <>
-                {' '}Your quota will reset on{' '}
-                <strong>{new Date(resetDate).toLocaleDateString()}</strong>.
+                {' '}
+                Your quota will reset on <strong>{new Date(resetDate).toLocaleDateString()}</strong>
+                .
               </>
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-2 text-sm text-muted-foreground">
-          <p>You can still view your existing course content, but AI features (chat, generation) are paused until your quota resets.</p>
+          <p>
+            You can still view your existing course content, but AI features (chat, generation) are
+            paused until your quota resets.
+          </p>
         </div>
         <AlertDialogFooter>
-          <AlertDialogAction onClick={onDismiss}>
-            OK
-          </AlertDialogAction>
+          <AlertDialogAction onClick={onDismiss}>OK</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

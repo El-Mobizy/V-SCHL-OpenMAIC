@@ -24,13 +24,13 @@ export async function symfonyServerFetch<T>(
 
 /** Save syllabus from server-side (after generation) */
 export function saveSyllabusServer(
-  courseId: number,
-  studentId: number,
+  courseUuid: string,
+  studentUuid: string,
   content: unknown,
   accessToken: string,
 ): Promise<void> {
-  return symfonyServerFetch(`/api/courses/${courseId}/syllabus`, accessToken, {
+  return symfonyServerFetch(`/api/courses/${courseUuid}/syllabus`, accessToken, {
     method: 'POST',
-    body: JSON.stringify({ student_id: studentId, content }),
+    body: JSON.stringify({ student_uuid: studentUuid, content }),
   });
 }

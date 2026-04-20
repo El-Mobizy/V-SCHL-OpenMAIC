@@ -451,7 +451,11 @@ export function resolveWebSearchApiKey(clientKey?: string): string {
   return process.env.TAVILY_API_KEY || '';
 }
 
-interface ResolvedProviderConfig { apiKey: string; baseUrl?: string; models?: string[]; }
+interface ResolvedProviderConfig {
+  apiKey: string;
+  baseUrl?: string;
+  models?: string[];
+}
 
 const CACHE_TTL_MS = 60_000;
 let cache: { at: number; data: Map<string, ResolvedProviderConfig> } | null = null;
@@ -463,11 +467,16 @@ async function fetchFromSymfony(): Promise<Map<string, ResolvedProviderConfig>> 
   });
   if (!res.ok) return new Map();
   const keys = (await res.json()) as Array<{
-    provider: string; api_key?: string; base_url?: string; models: string[]; has_key?: boolean;
+    provider: string;
+    api_key?: string;
+    base_url?: string;
+    models: string[];
+    has_key?: boolean;
   }>;
   const m = new Map<string, ResolvedProviderConfig>();
   for (const k of keys) {
-    if (k.api_key) m.set(k.provider, { apiKey: k.api_key, baseUrl: k.base_url, models: k.models ?? [] });
+    if (k.api_key)
+      m.set(k.provider, { apiKey: k.api_key, baseUrl: k.base_url, models: k.models ?? [] });
   }
   return m;
 }
@@ -475,7 +484,9 @@ async function fetchFromSymfony(): Promise<Map<string, ResolvedProviderConfig>> 
 export async function loadProviderConfig(provider: string): Promise<ResolvedProviderConfig> {
   if (!cache || Date.now() - cache.at > CACHE_TTL_MS) {
     if (!inFlightFetch) {
-      inFlightFetch = fetchFromSymfony().finally(() => { inFlightFetch = null; });
+      inFlightFetch = fetchFromSymfony().finally(() => {
+        inFlightFetch = null;
+      });
     }
     const data = await inFlightFetch;
     // Only write the cache if nobody else updated it while we were waiting.
@@ -492,7 +503,10 @@ export async function loadProviderConfig(provider: string): Promise<ResolvedProv
     return {
       apiKey: envKey,
       baseUrl: process.env[`${u}_BASE_URL`] || undefined,
-      models: (process.env[`${u}_MODELS`] ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      models: (process.env[`${u}_MODELS`] ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
     };
   }
   throw new ApiError(400, 'NOT_CONFIGURED', `No credentials configured for ${provider}`);

@@ -20,17 +20,30 @@ const STRIPPED_HEADERS = new Set([
 
 type Ctx = { params: Promise<{ path: string[] }> };
 
-export async function GET(req: NextRequest, ctx: Ctx)    { return proxy(req, ctx); }
-export async function POST(req: NextRequest, ctx: Ctx)   { return proxy(req, ctx); }
-export async function PUT(req: NextRequest, ctx: Ctx)    { return proxy(req, ctx); }
-export async function PATCH(req: NextRequest, ctx: Ctx)  { return proxy(req, ctx); }
-export async function DELETE(req: NextRequest, ctx: Ctx) { return proxy(req, ctx); }
+export async function GET(req: NextRequest, ctx: Ctx) {
+  return proxy(req, ctx);
+}
+export async function POST(req: NextRequest, ctx: Ctx) {
+  return proxy(req, ctx);
+}
+export async function PUT(req: NextRequest, ctx: Ctx) {
+  return proxy(req, ctx);
+}
+export async function PATCH(req: NextRequest, ctx: Ctx) {
+  return proxy(req, ctx);
+}
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  return proxy(req, ctx);
+}
 
 async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
   const { path } = await ctx.params;
-  const access  = req.cookies.get('access_token')?.value;
+  const access = req.cookies.get('access_token')?.value;
   const refresh = req.cookies.get('refresh_token')?.value;
   if (!access) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const ct = req.headers.get('content-type') ?? '';
+  const isJson = ct.includes('application/json');
 
   if (req.method !== 'GET' && req.method !== 'DELETE') {
     const len = Number(req.headers.get('content-length') ?? 0);
@@ -40,32 +53,43 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
   }
 
   try {
-    const bodyText =
-      req.method === 'GET' || req.method === 'DELETE'
-        ? undefined
-        : await req.text();
-
-    // Defense-in-depth: content-length can be absent with chunked encoding.
-    // Re-check after reading the body.
-    if (bodyText !== undefined && Buffer.byteLength(bodyText, 'utf8') > MAX_BODY) {
-      return NextResponse.json({ error: 'Content too large (max 5MB)' }, { status: 413 });
+    let body: ArrayBuffer | string | undefined;
+    if (req.method === 'GET' || req.method === 'DELETE') {
+      body = undefined;
+    } else if (isJson) {
+      body = await req.text();
+      if (Buffer.byteLength(body, 'utf8') > MAX_BODY) {
+        return NextResponse.json({ error: 'Content too large (max 5MB)' }, { status: 413 });
+      }
+    } else {
+      body = await req.arrayBuffer();
+      if (body.byteLength > MAX_BODY) {
+        return NextResponse.json({ error: 'Content too large (max 5MB)' }, { status: 413 });
+      }
     }
 
     // Read env inside the function so vitest stubEnv can override it (see tests/api/symfony-proxy.test.ts).
     const upstreamUrl = `${process.env.SYMFONY_API_URL}/api/${path.join('/')}${req.nextUrl.search || ''}`;
 
-    const firstRes = await forward(upstreamUrl, req.method, access, bodyText, req.headers.get('content-type'));
+    const firstRes = await forward(upstreamUrl, req.method, access, body, ct || null);
     if (firstRes.status !== 401 || !refresh) return passthrough(firstRes);
 
     // 401 + have refresh cookie → single-flight refresh, retry once
     let newTokens;
-    try { newTokens = await refreshTokens(refresh); }
-    catch {
+    try {
+      newTokens = await refreshTokens(refresh);
+    } catch {
       const res = await passthrough(firstRes);
       clearAuthCookies(res);
       return res;
     }
-    const retryRes = await forward(upstreamUrl, req.method, newTokens.access_token, bodyText, req.headers.get('content-type'));
+    const retryRes = await forward(
+      upstreamUrl,
+      req.method,
+      newTokens.access_token,
+      body,
+      ct || null,
+    );
     const out = await passthrough(retryRes);
     setAuthCookies(out, newTokens.access_token, newTokens.refresh_token);
     return out;
@@ -75,7 +99,11 @@ async function proxy(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
 }
 
 async function forward(
-  url: string, method: string, token: string, body: string | undefined, contentType: string | null,
+  url: string,
+  method: string,
+  token: string,
+  body: ArrayBuffer | string | undefined,
+  contentType: string | null,
 ): Promise<Response> {
   return fetch(url, {
     method,
@@ -83,7 +111,7 @@ async function forward(
       Authorization: `Bearer ${token}`,
       ...(contentType ? { 'Content-Type': contentType } : {}),
     },
-    body,
+    body: body as BodyInit | undefined,
   });
 }
 

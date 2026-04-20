@@ -3,11 +3,14 @@ import { test, expect } from '@playwright/test';
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
 
 test.describe('Symfony wiring — security invariants', () => {
-  test('login puts tokens in httpOnly cookies, not JS-readable storage', async ({ page, context }) => {
+  test('login puts tokens in httpOnly cookies, not JS-readable storage', async ({
+    page,
+    context,
+  }) => {
     test.skip(!process.env.E2E_STUDENT_EMAIL, 'E2E credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type=email]',    process.env.E2E_STUDENT_EMAIL!);
+    await page.fill('input[aria-label="Email or Matric Number"]', process.env.E2E_STUDENT_EMAIL!);
     await page.fill('input[type=password]', process.env.E2E_STUDENT_PASSWORD!);
     await page.click('button[type=submit]');
 
@@ -41,7 +44,7 @@ test.describe('Symfony wiring — security invariants', () => {
     test.skip(!process.env.E2E_STUDENT_EMAIL, 'E2E credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type=email]',    process.env.E2E_STUDENT_EMAIL!);
+    await page.fill('input[aria-label="Email or Matric Number"]', process.env.E2E_STUDENT_EMAIL!);
     await page.fill('input[type=password]', process.env.E2E_STUDENT_PASSWORD!);
     await page.click('button[type=submit]');
     await expect(page).toHaveURL(/\/dashboard/);
@@ -52,14 +55,14 @@ test.describe('Symfony wiring — security invariants', () => {
 
     // Find the primary button inside the first card (Start/Continue)
     await firstCard.locator('button').click();
-    await expect(page).toHaveURL(/\/course\/\d+/);
+    await expect(page).toHaveURL(/\/course\/[0-9A-HJKMNP-TV-Z]{26}/);
   });
 
   test('logout clears cookies and redirects to login', async ({ page, context }) => {
     test.skip(!process.env.E2E_STUDENT_EMAIL, 'E2E credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type=email]',    process.env.E2E_STUDENT_EMAIL!);
+    await page.fill('input[aria-label="Email or Matric Number"]', process.env.E2E_STUDENT_EMAIL!);
     await page.fill('input[type=password]', process.env.E2E_STUDENT_PASSWORD!);
     await page.click('button[type=submit]');
     await expect(page).toHaveURL(/\/dashboard/);
@@ -80,7 +83,7 @@ test.describe('Admin gate', () => {
     test.skip(!process.env.E2E_STUDENT_EMAIL, 'E2E credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type=email]',    process.env.E2E_STUDENT_EMAIL!);
+    await page.fill('input[aria-label="Email or Matric Number"]', process.env.E2E_STUDENT_EMAIL!);
     await page.fill('input[type=password]', process.env.E2E_STUDENT_PASSWORD!);
     await page.click('button[type=submit]');
     await expect(page).toHaveURL(/\/dashboard/);
@@ -94,7 +97,7 @@ test.describe('Admin gate', () => {
     test.skip(!process.env.E2E_ADMIN_EMAIL, 'E2E admin credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
-    await page.fill('input[type=email]',    process.env.E2E_ADMIN_EMAIL!);
+    await page.fill('input[aria-label="Email or Matric Number"]', process.env.E2E_ADMIN_EMAIL!);
     await page.fill('input[type=password]', process.env.E2E_ADMIN_PASSWORD!);
     await page.click('button[type=submit]');
     await expect(page).toHaveURL(/\/dashboard/);

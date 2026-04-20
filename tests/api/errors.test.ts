@@ -56,4 +56,11 @@ describe('toApiError', () => {
     const e = await toApiError(res);
     expect(e.code).toBe('SERVER');
   });
+
+  it('maps 415 to UNSUPPORTED_MEDIA_TYPE', async () => {
+    const res = new Response(JSON.stringify({ error: 'bad MIME' }), { status: 415 });
+    const err = await toApiError(res);
+    expect(err.code).toBe('UNSUPPORTED_MEDIA_TYPE');
+    expect(err.status).toBe(415);
+  });
 });

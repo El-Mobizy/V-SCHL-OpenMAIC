@@ -15,10 +15,10 @@ export default function CourseViewerPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
-  const courseId = Number(params.courseId);
+  const courseUuid = String(params.courseId);
 
   const [course, setCourse] = useState<Course | null>(null);
-  const [syllabus, setSyllabus] = useState<any>(null);
+  const [syllabus, setSyllabus] = useState<unknown>(null);
   const [progress, setProgress] = useState<CourseProgress | null>(null);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [currentScene, setCurrentScene] = useState(0);
@@ -27,19 +27,19 @@ export default function CourseViewerPage() {
     if (!user) return;
     (async () => {
       try {
-        const courseData = await api.courses.get(courseId);
+        const courseData = await api.courses.get(courseUuid);
         setCourse(courseData);
 
-        let syllabusData: any = null;
+        let syllabusData: unknown = null;
         try {
-          syllabusData = await api.courses.syllabus.get(courseId, user.id);
+          syllabusData = await api.courses.syllabus.get(courseUuid, user.student_uuid);
         } catch (e) {
           if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
         }
 
         let progressData: CourseProgress | null = null;
         try {
-          progressData = await api.courses.progress.get(user.id, courseId);
+          progressData = await api.courses.progress.get(user.student_uuid, courseUuid);
         } catch (e) {
           if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
         }
@@ -59,12 +59,12 @@ export default function CourseViewerPage() {
         console.error('Failed to load course:', err);
       }
     })();
-  }, [user, courseId]);
+  }, [user, courseUuid]);
 
   async function generateSyllabus(courseData: Course) {
     if (!user) return;
     try {
-      const requirement = `Course: ${courseData.title}\n\nDescription: ${courseData.description}\n\nObjectives:\n${courseData.objectives.map((o, i) => `${i + 1}. ${o}`).join('\n')}`;
+      const requirement = `Course: ${courseData.title}\n\nDescription: ${courseData.description}\n\nObjectives:\n${courseData.objectives ?? 'No objectives set.'}`;
 
       const res = await fetch('/api/generate-classroom', {
         method: 'POST',
@@ -73,7 +73,7 @@ export default function CourseViewerPage() {
       });
 
       if (!res.ok) throw new Error('Generation failed');
-      const { jobId, pollUrl } = await res.json();
+      const { pollUrl } = await res.json();
 
       // Poll until complete
       let result = null;
@@ -89,7 +89,7 @@ export default function CourseViewerPage() {
       }
 
       // Save to Symfony
-      await api.courses.syllabus.save(courseId, user.id, result);
+      await api.courses.syllabus.save(courseUuid, user.student_uuid, result);
       setSyllabus(result);
       setViewState('ready');
     } catch (err) {
@@ -101,7 +101,7 @@ export default function CourseViewerPage() {
     if (!user) return;
     setCurrentScene(index);
     try {
-      await api.courses.progress.update(user.id, courseId, index);
+      await api.courses.progress.update(user.student_uuid, courseUuid, index);
     } catch {
       // Progress update failed — non-critical
     }
@@ -125,7 +125,7 @@ export default function CourseViewerPage() {
     );
   }
 
-  const scenes = syllabus?.scenes ?? [];
+  const scenes = (syllabus as { scenes?: unknown[] } | null)?.scenes ?? [];
 
   return (
     <div className="space-y-6">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setAuthCookies, clearAuthCookies } from '@/lib/server/auth-cookies';
-import { decodeJwtPayload, decodeStudentId } from '@/lib/auth/jwt';
+import { extractUser } from '@/lib/auth/jwt';
 import { toApiError } from '@/lib/api/errors';
 import { tokenCounter } from '@/lib/server/token-counter';
 
@@ -12,11 +12,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body', code: 'VALIDATION' }, { status: 400 });
   }
 
-  const email    = typeof (body as { email?: unknown }).email    === 'string' ? (body as { email: string }).email.trim()    : '';
-  const password = typeof (body as { password?: unknown }).password === 'string' ? (body as { password: string }).password : '';
+  const email =
+    typeof (body as { email?: unknown }).email === 'string'
+      ? (body as { email: string }).email.trim()
+      : '';
+  const password =
+    typeof (body as { password?: unknown }).password === 'string'
+      ? (body as { password: string }).password
+      : '';
 
   if (!email || !password) {
-    return NextResponse.json({ error: 'email and password required', code: 'VALIDATION' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'email and password required', code: 'VALIDATION' },
+      { status: 400 },
+    );
   }
 
   const upstream = await fetch(`${process.env.SYMFONY_API_URL}/api/login`, {
@@ -38,44 +47,30 @@ export async function POST(req: NextRequest) {
   try {
     tokens = await upstream.json();
   } catch {
-    return NextResponse.json({ error: 'Malformed upstream response', code: 'SERVER' }, { status: 502 });
+    return NextResponse.json(
+      { error: 'Malformed upstream response', code: 'SERVER' },
+      { status: 502 },
+    );
   }
 
   const { access_token, refresh_token } = tokens;
   if (!access_token || !refresh_token) {
-    return NextResponse.json({ error: 'Malformed upstream response', code: 'SERVER' }, { status: 502 });
+    return NextResponse.json(
+      { error: 'Malformed upstream response', code: 'SERVER' },
+      { status: 502 },
+    );
   }
 
-  const studentId = decodeStudentId(access_token);
-  if (studentId === null) {
+  const user = extractUser(access_token);
+  if (!user) {
     return NextResponse.json({ error: 'Malformed token', code: 'SERVER' }, { status: 502 });
   }
-
-  const payload = decodeJwtPayload(access_token);
-  if (!payload) {
-    return NextResponse.json({ error: 'Malformed token', code: 'SERVER' }, { status: 502 });
-  }
-
-  const role = payload.role;
-  if (role !== 'admin' && role !== 'student') {
-    return NextResponse.json({ error: 'Unknown role', code: 'SERVER' }, { status: 502 });
-  }
-
-  const user = {
-    id: studentId,
-    email: String(payload.email ?? ''),
-    name:  String(payload.name  ?? ''),
-    role,
-    department: String(payload.department ?? ''),
-    program:    String(payload.program    ?? ''),
-    level:      String(payload.level      ?? ''),
-  };
 
   const res = NextResponse.json({ user });
   setAuthCookies(res, access_token, refresh_token);
 
   if (user.role === 'student') {
-    tokenCounter.initQuota(user.id, access_token).catch(() => {});
+    tokenCounter.initQuota(user.student_uuid, access_token).catch(() => {});
   }
   return res;
 }

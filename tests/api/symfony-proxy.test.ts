@@ -8,6 +8,8 @@ vi.mock('next/server', async () => {
 import { GET } from '@/app/api/symfony/[...path]/route';
 import { NextRequest } from 'next/server';
 
+// Multipart upload test is in its own describe at the bottom
+
 const fetchMock = vi.fn();
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
@@ -44,7 +46,9 @@ describe('BFF proxy', () => {
   });
 
   it('passes 429 through with Retry-After', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('', { status: 429, headers: { 'Retry-After': '30' } }));
+    fetchMock.mockResolvedValueOnce(
+      new Response('', { status: 429, headers: { 'Retry-After': '30' } }),
+    );
     const req = reqWithCookie('http://test/api/symfony/courses', 'tok');
     const res = await GET(req, { params: Promise.resolve({ path: ['courses'] }) });
     expect(res.status).toBe(429);
@@ -77,7 +81,11 @@ describe('BFF proxy — additional coverage', () => {
   it('retries once on 401 after refresh succeeds, sets new cookies', async () => {
     fetchMock
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Expired' }), { status: 401 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'new-access', refresh_token: 'new-refresh' }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ token: 'new-access', refresh_token: 'new-refresh' }), {
+          status: 200,
+        }),
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: 1 }), { status: 200 }));
     const { __resetInFlightForTest } = await import('@/lib/server/refresh');
     __resetInFlightForTest();
@@ -104,7 +112,9 @@ describe('BFF proxy — additional coverage', () => {
     const res = await GET(req, { params: Promise.resolve({ path: ['courses'] }) });
     expect(res.status).toBe(401);
     const setCookies = res.headers.getSetCookie();
-    expect(setCookies.some((c) => c.startsWith('access_token=;') || /access_token=;.*Max-Age=0/.test(c))).toBe(true);
+    expect(
+      setCookies.some((c) => c.startsWith('access_token=;') || /access_token=;.*Max-Age=0/.test(c)),
+    ).toBe(true);
   });
 
   it('rejects oversized POST body with 413 before forwarding', async () => {
@@ -115,7 +125,9 @@ describe('BFF proxy — additional coverage', () => {
     });
     req.cookies.set('access_token', 'tok');
     const { POST } = await import('@/app/api/symfony/[...path]/route');
-    const res = await POST(req, { params: Promise.resolve({ path: ['courses', '1', 'syllabus'] }) });
+    const res = await POST(req, {
+      params: Promise.resolve({ path: ['courses', '1', 'syllabus'] }),
+    });
     expect(res.status).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -144,7 +156,7 @@ describe('BFF proxy — additional coverage', () => {
   });
 
   it('rejects chunked POST body exceeding 5MB (no content-length header)', async () => {
-    const oversized = 'x'.repeat(6 * 1024 * 1024);  // 6 MB string
+    const oversized = 'x'.repeat(6 * 1024 * 1024); // 6 MB string
     const req = new NextRequest('http://test/api/symfony/courses/1/syllabus', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }, // NO content-length
@@ -152,25 +164,56 @@ describe('BFF proxy — additional coverage', () => {
     });
     req.cookies.set('access_token', 'tok');
     const { POST } = await import('@/app/api/symfony/[...path]/route');
-    const res = await POST(req, { params: Promise.resolve({ path: ['courses', '1', 'syllabus'] }) });
+    const res = await POST(req, {
+      params: Promise.resolve({ path: ['courses', '1', 'syllabus'] }),
+    });
     expect(res.status).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('strips upstream authorization / www-authenticate / x-service-token headers', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: {
-        'Authorization': 'Bearer leaked',
-        'WWW-Authenticate': 'Bearer realm="x"',
-        'X-Service-Token': 'also-leaked',
-      },
-    }));
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          Authorization: 'Bearer leaked',
+          'WWW-Authenticate': 'Bearer realm="x"',
+          'X-Service-Token': 'also-leaked',
+        },
+      }),
+    );
     const req = new NextRequest('http://test/api/symfony/school/branding');
     req.cookies.set('access_token', 'tok');
     const res = await GET(req, { params: Promise.resolve({ path: ['school', 'branding'] }) });
     expect(res.headers.get('authorization')).toBeNull();
     expect(res.headers.get('www-authenticate')).toBeNull();
     expect(res.headers.get('x-service-token')).toBeNull();
+  });
+});
+
+describe('BFF proxy — multipart upload', () => {
+  it('forwards multipart/form-data body as binary without JSON coercion', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ logo_url: '/uploads/logo.png' }), { status: 200 }),
+    );
+    const fd = new FormData();
+    fd.append(
+      'file',
+      new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }),
+      'logo.png',
+    );
+    const req = new NextRequest('http://test/api/symfony/admin/school/branding/logo', {
+      method: 'POST',
+      body: fd,
+    });
+    req.cookies.set('access_token', 'tok');
+    const { POST } = await import('@/app/api/symfony/[...path]/route');
+    const res = await POST(req, {
+      params: Promise.resolve({ path: ['admin', 'school', 'branding', 'logo'] }),
+    });
+    expect(res.status).toBe(200);
+    const call = fetchMock.mock.calls[0];
+    expect(call[0]).toBe('http://symfony/api/admin/school/branding/logo');
+    expect(typeof call[1].body).not.toBe('string');
   });
 });

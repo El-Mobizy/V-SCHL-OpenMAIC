@@ -17,11 +17,17 @@ export function ApiErrorBoundary({ children }: { children: React.ReactNode }) {
 
       switch (err.code) {
         case 'UNAUTHORIZED':
-          useAuthStore.getState().logout().finally(() => router.push('/login'));
+          useAuthStore
+            .getState()
+            .logout()
+            .finally(() => router.push('/login'));
           break;
         case 'SUSPENDED':
           toast.error('Account suspended, contact admin');
-          useAuthStore.getState().logout().finally(() => router.push('/login'));
+          useAuthStore
+            .getState()
+            .logout()
+            .finally(() => router.push('/login'));
           break;
         case 'FORBIDDEN':
           toast.error("You don't have permission for that");

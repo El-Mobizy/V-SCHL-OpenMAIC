@@ -14,7 +14,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe('refreshTokens', () => {
   it('maps Lexik "token" field to access_token', async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ token: 'new-access', refresh_token: 'new-refresh' }), { status: 200 }),
+      new Response(JSON.stringify({ token: 'new-access', refresh_token: 'new-refresh' }), {
+        status: 200,
+      }),
     );
     const tokens = await refreshTokens('old-refresh');
     expect(tokens.access_token).toBe('new-access');
@@ -31,7 +33,11 @@ describe('refreshTokens', () => {
 
   it('is single-flight: 10 concurrent callers share one fetch', async () => {
     let resolveIt!: (v: Response) => void;
-    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => { resolveIt = r; }));
+    fetchMock.mockReturnValueOnce(
+      new Promise<Response>((r) => {
+        resolveIt = r;
+      }),
+    );
     const calls = Promise.all(Array.from({ length: 10 }, () => refreshTokens('r')));
     resolveIt(new Response(JSON.stringify({ token: 't', refresh_token: 'r2' }), { status: 200 }));
     const results = await calls;

@@ -12,21 +12,21 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
-  const [progress, setProgress] = useState<Record<number, CourseProgress>>({});
+  const [progress, setProgress] = useState<Record<string, CourseProgress>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
-        const courseList = await api.courses.list(user.id);
+        const { data: courseList } = await api.courses.list({ studentUuid: user.student_uuid });
         setCourses(courseList);
 
-        const progressMap: Record<number, CourseProgress> = {};
+        const progressMap: Record<string, CourseProgress> = {};
         await Promise.all(
           courseList.map(async (c) => {
             try {
-              progressMap[c.id] = await api.courses.progress.get(user.id, c.id);
+              progressMap[c.uuid] = await api.courses.progress.get(user.student_uuid, c.uuid);
             } catch (e) {
               if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
             }
@@ -63,7 +63,7 @@ export default function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {courses.map((course) => {
-            const p = progress[course.id];
+            const p = progress[course.uuid];
             const progressPercent = p
               ? Math.round((p.completed_scenes.length / p.total_scenes) * 100)
               : 0;
@@ -71,14 +71,12 @@ export default function DashboardPage() {
 
             return (
               <div
-                key={course.id}
+                key={course.uuid}
                 data-testid="course-card"
                 className="border rounded-lg p-5 bg-card hover:shadow-md transition-shadow space-y-3"
               >
                 <h3 className="font-semibold">{course.title}</h3>
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {course.description}
-                </p>
+                <p className="text-sm text-muted-foreground line-clamp-2">{course.description}</p>
 
                 {hasStarted && (
                   <div className="space-y-1">
@@ -95,10 +93,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <Button
-                  className="w-full"
-                  onClick={() => router.push(`/course/${course.id}`)}
-                >
+                <Button className="w-full" onClick={() => router.push(`/course/${course.uuid}`)}>
                   {hasStarted ? 'Continue' : 'Start'}
                 </Button>
               </div>

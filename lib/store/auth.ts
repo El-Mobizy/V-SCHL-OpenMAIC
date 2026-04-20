@@ -9,7 +9,7 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login:  (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
   clearError: () => void;
@@ -35,7 +35,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
-        try { await api.auth.logout(); } catch {}
+        try {
+          await api.auth.logout();
+        } catch {}
         set({ user: null, isAuthenticated: false, error: null });
       },
 
@@ -60,3 +62,5 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
+
+export const selectStudentUuid = (s: AuthState) => s.user?.student_uuid ?? '';

@@ -12,8 +12,8 @@ describe('decodeJwtPayload', () => {
   it('decodes a valid JWT payload', () => {
     const token = fakeJwt({ sub: '1', email: 'test@school.com' });
     const payload = decodeJwtPayload(token);
-    expect(payload.sub).toBe('1');
-    expect(payload.email).toBe('test@school.com');
+    expect(payload?.sub).toBe('1');
+    expect(payload?.email).toBe('test@school.com');
   });
 
   it('returns null for invalid token', () => {
@@ -42,28 +42,57 @@ describe('isTokenExpired', () => {
 describe('extractUser', () => {
   it('extracts user from JWT payload', () => {
     const token = fakeJwt({
-      sub: '42',
       email: 'student@school.com',
       name: 'John Doe',
       role: 'student',
       department: 'CS',
       program: 'BSc',
       level: 'L2',
+      student_uuid: '01HZQK0123456789ABCDEFGHJK',
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
     const user = extractUser(token);
     expect(user).toEqual({
-      id: 42,
       email: 'student@school.com',
       name: 'John Doe',
       role: 'student',
       department: 'CS',
       program: 'BSc',
       level: 'L2',
+      student_uuid: '01HZQK0123456789ABCDEFGHJK',
     });
   });
 
   it('returns null for invalid token', () => {
     expect(extractUser('bad')).toBeNull();
+  });
+
+  it('extractUser includes student_uuid from payload', () => {
+    const token = fakeJwt({
+      email: 'stu@school.com',
+      name: 'Student One',
+      role: 'student',
+      department: 'CS',
+      program: 'BSc',
+      level: 'L1',
+      student_uuid: '01HZQK0123456789ABCDEFGHJK',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const user = extractUser(token);
+    expect(user?.student_uuid).toBe('01HZQK0123456789ABCDEFGHJK');
+  });
+
+  it('extractUser returns empty student_uuid for non-student', () => {
+    const token = fakeJwt({
+      email: 'admin@school.com',
+      name: 'Admin User',
+      role: 'admin',
+      department: '',
+      program: '',
+      level: '',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const user = extractUser(token);
+    expect(user?.student_uuid).toBe('');
   });
 });

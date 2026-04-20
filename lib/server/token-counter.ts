@@ -19,17 +19,17 @@ interface UsageEntry {
 }
 
 class TokenCounter {
-  private cache = new Map<number, CachedQuota>();
+  private cache = new Map<string, CachedQuota>();
 
-  async initQuota(studentId: number, accessToken: string): Promise<void> {
-    const res = await fetch(`${SYMFONY_API_URL}/api/token-usage/${studentId}/quota`, {
+  async initQuota(studentUuid: string, accessToken: string): Promise<void> {
+    const res = await fetch(`${SYMFONY_API_URL}/api/token-usage/${studentUuid}/quota`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!res.ok) throw new Error('Failed to fetch quota');
     const { max_tokens, used_tokens, reset_date } = await res.json();
 
-    this.cache.set(studentId, {
+    this.cache.set(studentUuid, {
       maxTokens: max_tokens,
       usedTokens: used_tokens,
       resetDate: reset_date,
@@ -39,8 +39,8 @@ class TokenCounter {
     });
   }
 
-  checkQuota(studentId: number): { allowed: boolean; remaining: number; resetDate?: string } {
-    const cached = this.cache.get(studentId);
+  checkQuota(studentUuid: string): { allowed: boolean; remaining: number; resetDate?: string } {
+    const cached = this.cache.get(studentUuid);
     if (!cached) return { allowed: false, remaining: 0 };
 
     const remaining = Math.max(0, cached.maxTokens - cached.usedTokens);
@@ -52,13 +52,13 @@ class TokenCounter {
   }
 
   recordUsage(
-    studentId: number,
+    studentUuid: string,
     provider: string,
     model: string,
     inputTokens: number,
     outputTokens: number,
   ): void {
-    const cached = this.cache.get(studentId);
+    const cached = this.cache.get(studentUuid);
     if (!cached) return;
 
     cached.usedTokens += inputTokens + outputTokens;
@@ -72,12 +72,12 @@ class TokenCounter {
     cached.callsSinceSync += 1;
 
     if (cached.callsSinceSync >= SYNC_INTERVAL_CALLS) {
-      this.flushUsage(studentId).catch(() => {});
+      this.flushUsage(studentUuid).catch(() => {});
     }
   }
 
-  async flushUsage(studentId: number): Promise<void> {
-    const cached = this.cache.get(studentId);
+  async flushUsage(studentUuid: string): Promise<void> {
+    const cached = this.cache.get(studentUuid);
     if (!cached || cached.pendingUsage.length === 0) return;
 
     const usage = [...cached.pendingUsage];
@@ -92,7 +92,7 @@ class TokenCounter {
           Authorization: `Bearer ${cached.accessToken}`,
         },
         body: JSON.stringify({
-          student_id: studentId,
+          student_uuid: studentUuid,
           entries: usage,
         }),
       });
@@ -105,9 +105,9 @@ class TokenCounter {
     }
   }
 
-  clearCache(studentId: number): void {
-    this.flushUsage(studentId).catch(() => {});
-    this.cache.delete(studentId);
+  clearCache(studentUuid: string): void {
+    this.flushUsage(studentUuid).catch(() => {});
+    this.cache.delete(studentUuid);
   }
 
   clearAll(): void {

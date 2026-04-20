@@ -13,8 +13,17 @@ import { Input } from '@/components/ui/input';
 // siliconflow, doubao, grok) will surface NOT_CONFIGURED. Admins can still save keys
 // for them in anticipation of future provider-switch cases.
 const PROVIDERS = [
-  'openai', 'anthropic', 'google',
-  'deepseek', 'qwen', 'kimi', 'minimax', 'glm', 'siliconflow', 'doubao', 'grok',
+  'openai',
+  'anthropic',
+  'google',
+  'deepseek',
+  'qwen',
+  'kimi',
+  'minimax',
+  'glm',
+  'siliconflow',
+  'doubao',
+  'grok',
 ] as const;
 
 type Draft = {
@@ -42,7 +51,9 @@ export default function ApiKeysPage() {
     }
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const byProvider = new Map(keys.map((k) => [k.provider, k]));
 
@@ -64,7 +75,10 @@ export default function ApiKeysPage() {
         provider: draft.provider,
         api_key: draft.api_key || undefined,
         base_url: draft.base_url || undefined,
-        models: draft.models.split(',').map((s) => s.trim()).filter(Boolean),
+        models: draft.models
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
       });
       toast.success(`${draft.provider}: saved`);
       setEditing(null);
@@ -147,10 +161,16 @@ export default function ApiKeysPage() {
                 <tr key={p} className="border-t align-top">
                   <td className="px-4 py-3 font-medium">{p}</td>
                   <td className="px-4 py-3 font-mono">
-                    {k?.has_key ? 'sk-••••••••' : <span className="text-muted-foreground">— not set —</span>}
+                    {k?.has_key ? (
+                      'sk-••••••••'
+                    ) : (
+                      <span className="text-muted-foreground">— not set —</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{k?.base_url || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{k?.models?.join(', ') || '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {k?.models?.join(', ') || '—'}
+                  </td>
                   <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
                     {k?.has_key && (
                       <Button
@@ -176,7 +196,12 @@ export default function ApiKeysPage() {
                     <td colSpan={5} className="px-4 pb-4 bg-muted/30">
                       <div className="grid gap-2 pt-3 max-w-xl">
                         <label className="text-xs font-medium">
-                          API key {k?.has_key && <span className="text-muted-foreground">(leave blank to keep existing)</span>}
+                          API key{' '}
+                          {k?.has_key && (
+                            <span className="text-muted-foreground">
+                              (leave blank to keep existing)
+                            </span>
+                          )}
                         </label>
                         <Input
                           type="password"
@@ -198,11 +223,16 @@ export default function ApiKeysPage() {
                           onChange={(e) => setDraft({ ...draft, models: e.target.value })}
                         />
                         <div className="flex gap-2 pt-1">
-                          <Button size="sm" onClick={save}>Save</Button>
+                          <Button size="sm" onClick={save}>
+                            Save
+                          </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => { setEditing(null); setDraft(null); }}
+                            onClick={() => {
+                              setEditing(null);
+                              setDraft(null);
+                            }}
                           >
                             Cancel
                           </Button>

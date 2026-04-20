@@ -8,11 +8,7 @@
 import { NextRequest } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
-import {
-  apiError,
-  apiErrorResponseFromApiError,
-  apiSuccess,
-} from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
 import { requireStudentAuth } from '@/lib/server/request-auth';
 import { parseModelString } from '@/lib/ai/providers';
@@ -33,7 +29,7 @@ interface GradeResponse {
 }
 
 export async function POST(req: NextRequest) {
-  let studentAuth: { studentId: number; accessToken: string };
+  let studentAuth: { studentId: string; accessToken: string };
   try {
     studentAuth = requireStudentAuth(req);
   } catch (e) {
