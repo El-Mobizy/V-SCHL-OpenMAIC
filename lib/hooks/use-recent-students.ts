@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const KEY = 'admin:recent-students';
 export type RecentStudent = {
@@ -23,8 +23,11 @@ function write(v: RecentStudent[]) {
 }
 
 export function useRecentStudents() {
-  // Lazy initializer reads sessionStorage on first client render (no re-render cascade).
-  const [list, setList] = useState<RecentStudent[]>(read);
+  const [list, setList] = useState<RecentStudent[]>([]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is an external system; syncing it into state on mount is the intended use-case for useEffect
+  useEffect(() => {
+    setList(read());
+  }, []);
   const push = useCallback((s: RecentStudent) => {
     setList((prev) => {
       const next = [s, ...prev.filter((p) => p.ulid !== s.ulid)].slice(0, 10);

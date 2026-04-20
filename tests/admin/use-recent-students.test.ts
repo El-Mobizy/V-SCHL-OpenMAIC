@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useRecentStudents, type RecentStudent } from '@/lib/hooks/use-recent-students';
 
 function makeStudent(ulid: string, overrides: Partial<RecentStudent> = {}): RecentStudent {
@@ -55,7 +55,7 @@ describe('useRecentStudents', () => {
     expect(result.current.list.length).toBe(10);
   });
 
-  it('sessionStorage survives simulated reload (second hook reads same storage)', () => {
+  it('sessionStorage survives simulated reload (second hook reads same storage)', async () => {
     const { result: r1 } = renderHook(() => useRecentStudents());
     const s = makeStudent('01PERSISTULID000000000000AA');
     act(() => {
@@ -64,7 +64,9 @@ describe('useRecentStudents', () => {
 
     // Simulate a new hook instance reading the same sessionStorage
     const { result: r2 } = renderHook(() => useRecentStudents());
-    // After the useEffect fires, list should be populated
-    expect(r2.current.list.some((e) => e.ulid === s.ulid)).toBe(true);
+    // Wait for the useEffect to fire and load from sessionStorage
+    await waitFor(() => {
+      expect(r2.current.list.some((e) => e.ulid === s.ulid)).toBe(true);
+    });
   });
 });
