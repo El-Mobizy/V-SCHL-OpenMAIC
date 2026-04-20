@@ -79,7 +79,7 @@ test.describe('Symfony wiring — security invariants', () => {
 });
 
 test.describe('Admin gate', () => {
-  test('student cannot reach /dashboard/admin/api-keys (notFound)', async ({ page }) => {
+  test('student cannot reach /admin/settings/api-keys (notFound)', async ({ page }) => {
     test.skip(!process.env.E2E_STUDENT_EMAIL, 'E2E credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
@@ -89,20 +89,20 @@ test.describe('Admin gate', () => {
     await expect(page).toHaveURL(/\/dashboard/);
 
     // Direct navigation — admin layout should return 404
-    const response = await page.goto(`${BASE_URL}/dashboard/admin/api-keys`);
+    const response = await page.goto(`${BASE_URL}/admin/settings/api-keys`);
     expect(response?.status()).toBe(404);
   });
 
-  test('admin can reach /dashboard/admin/api-keys and sees the table', async ({ page }) => {
+  test('admin can reach /admin/settings/api-keys and sees the table', async ({ page }) => {
     test.skip(!process.env.E2E_ADMIN_EMAIL, 'E2E admin credentials not configured');
 
     await page.goto(`${BASE_URL}/login`);
     await page.fill('input[aria-label="Email or Matric Number"]', process.env.E2E_ADMIN_EMAIL!);
     await page.fill('input[type=password]', process.env.E2E_ADMIN_PASSWORD!);
     await page.click('button[type=submit]');
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/admin$/);
 
-    await page.goto(`${BASE_URL}/dashboard/admin/api-keys`);
+    await page.goto(`${BASE_URL}/admin/settings/api-keys`);
     await expect(page.getByRole('heading', { name: 'API Keys' })).toBeVisible();
 
     // All 11 provider rows render

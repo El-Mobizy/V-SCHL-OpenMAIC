@@ -120,7 +120,7 @@ export default function ApiKeysPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) toast.success(`${provider}: works`);
-      else toast.error(`${provider}: ${data.error ?? 'test failed'}`);
+      else toast.error(`${provider}: ${(data as { error?: string }).error ?? 'test failed'}`);
     } catch (e) {
       toast.error(`${provider}: ${(e as Error).message}`);
     } finally {
@@ -129,11 +129,11 @@ export default function ApiKeysPage() {
   }
 
   if (loading) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+    return <div className="text-sm text-muted-foreground">Loading…</div>;
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">API Keys</h1>
         <p className="text-sm text-muted-foreground">

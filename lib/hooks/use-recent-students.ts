@@ -24,8 +24,8 @@ function write(v: RecentStudent[]) {
 
 export function useRecentStudents() {
   const [list, setList] = useState<RecentStudent[]>([]);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is an external system; syncing it into state on mount is the intended use-case for useEffect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage is an external system; syncing it into state on mount is the intended use-case for useEffect
     setList(read());
   }, []);
   const push = useCallback((s: RecentStudent) => {
