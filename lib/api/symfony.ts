@@ -119,10 +119,26 @@ export const api = {
   admin: {
     keys: {
       list: () => bff<ApiKey[]>(`/admin/api-keys`),
-      upsert: (k: ApiKey) =>
-        bff<{ ok: true }>(`/admin/api-keys`, { method: 'POST', body: JSON.stringify(k) }),
-      remove: (provider: string) =>
-        bff<{ ok: true }>(`/admin/api-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
+      upsert: (k: Partial<ApiKey> & { provider: string }) =>
+        bff<{ ok: true }>(`/admin/api-keys`, {
+          method: 'POST',
+          body: JSON.stringify(k),
+        }),
+      setDefault: (args: { provider: string; schoolUuid?: string }) =>
+        bff<{ ok: true }>(`/admin/api-keys/default`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            provider: args.provider,
+            ...(args.schoolUuid ? { school_uuid: args.schoolUuid } : {}),
+          }),
+        }),
+      remove: (provider: string, opts: { schoolUuid?: string } = {}) => {
+        const qs = opts.schoolUuid ? `?school_uuid=${encodeURIComponent(opts.schoolUuid)}` : '';
+        return bff<{ ok: true }>(
+          `/admin/api-keys/${encodeURIComponent(provider)}${qs}`,
+          { method: 'DELETE' },
+        );
+      },
     },
     catalog: {
       list: () => bff<ProviderCatalogEntry[]>(`/admin/provider-catalog`),
