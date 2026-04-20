@@ -14,12 +14,12 @@ export default function LoginPage() {
   const { login, isLoading, error, clearError } = useAuthStore();
   const { logoUrl, schoolName } = useBranding();
 
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    await login(email, password);
+    await login(identifier, password);
 
     // Check if login succeeded (store is updated synchronously after await)
     const { isAuthenticated } = useAuthStore.getState();
@@ -45,10 +45,13 @@ export default function LoginPage() {
           )}
 
           <Input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => { clearError(); setEmail(e.target.value); }}
+            type="text"
+            inputMode="email"
+            autoComplete="username"
+            placeholder="Email or Matric Number"
+            aria-label="Email or Matric Number"
+            value={identifier}
+            onChange={(e) => { clearError(); setIdentifier(e.target.value); }}
             required
             autoFocus
           />
