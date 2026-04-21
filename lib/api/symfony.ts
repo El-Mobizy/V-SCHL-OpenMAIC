@@ -17,6 +17,7 @@ import type {
   ClassroomSummary,
   BulkQuotaRequest,
   BulkQuotaResult,
+  AdminTokenUsageRow,
 } from '@/lib/types/school';
 
 async function bff<T>(path: string, init?: RequestInit): Promise<T> {
@@ -148,6 +149,18 @@ export const api = {
       list: () => bff<ProviderCatalogEntry[]>(`/admin/provider-catalog`),
     },
     stats: () => bff<AdminStats>(`/admin/stats`),
+    tokenUsage: {
+      list: (opts: { page?: number; limit?: number; search?: string } = {}) => {
+        const qs = buildQuery({
+          page: opts.page,
+          limit: opts.limit,
+          search: opts.search,
+        });
+        return bff<PaginatedResponse<AdminTokenUsageRow>>(
+          `/admin/token-usage${qs ? `?${qs}` : ''}`,
+        );
+      },
+    },
     quota: {
       upsert: (studentUuid: string, patch: Partial<TokenQuota>) =>
         bff<TokenQuota>(`/token-usage/${studentUuid}/quota`, {
