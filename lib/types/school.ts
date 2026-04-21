@@ -184,6 +184,13 @@ export interface StudentStats {
   last_activity_at: string | null;
 }
 
+export interface SyllabusTopic {
+  uuid: string;
+  title: string;
+  description: string;
+  position: number;
+}
+
 export interface AdminTokenUsageRow {
   student_uuid: string;
   firstname: string;

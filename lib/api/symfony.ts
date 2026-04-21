@@ -18,6 +18,7 @@ import type {
   BulkQuotaRequest,
   BulkQuotaResult,
   AdminTokenUsageRow,
+  SyllabusTopic,
 } from '@/lib/types/school';
 
 async function bff<T>(path: string, init?: RequestInit): Promise<T> {
@@ -96,6 +97,14 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({ student_uuid: studentUuid, content }),
         }),
+    },
+    syllabusTopics: {
+      list: (courseUuid: string, studentUuid?: string) => {
+        const qs = studentUuid ? `?student=${studentUuid}` : '';
+        return bff<{ data: SyllabusTopic[] }>(
+          `/courses/${courseUuid}/syllabus-topics${qs}`,
+        );
+      },
     },
     progress: {
       get: (studentUuid: string, courseUuid: string) =>
