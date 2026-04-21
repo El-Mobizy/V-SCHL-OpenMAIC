@@ -122,11 +122,17 @@ export default function CourseViewerPage() {
 
   const generationLockRef = useRef(false);
   const pollAbortRef = useRef<AbortController | null>(null);
+  // Set to true right before an intentional success-path navigation
+  // (e.g. router.push into /classroom/{id}). Read synchronously by both the
+  // beforeunload and popstate guards to suppress the confirmation prompt on
+  // that one transition.
+  const leavingIntentionallyRef = useRef(false);
   const isGenerating = viewState === 'generating';
 
   useUnloadGuard(
     isGenerating,
     'Your classroom is still being generated. Leaving now will cancel it.',
+    leavingIntentionallyRef,
   );
 
   // Intercept the browser Back/Forward buttons while generating: push a
@@ -136,6 +142,7 @@ export default function CourseViewerPage() {
     if (!isGenerating) return;
     window.history.pushState(null, '', window.location.href);
     const onPopState = () => {
+      if (leavingIntentionallyRef.current) return;
       const leave = window.confirm(
         'Your classroom is still being generated. Leaving now will cancel it. Continue?',
       );
@@ -162,6 +169,7 @@ export default function CourseViewerPage() {
   function handleBack() {
     if (!confirmLeaveWhileGenerating()) return;
     pollAbortRef.current?.abort();
+    leavingIntentionallyRef.current = true;
     router.push('/dashboard');
   }
 
@@ -249,6 +257,7 @@ export default function CourseViewerPage() {
     setGenerationStep('Starting');
     setGenerationProgress(0);
     setErrorMessage(null);
+    leavingIntentionallyRef.current = false;
 
     const abort = new AbortController();
     pollAbortRef.current = abort;
@@ -324,6 +333,7 @@ export default function CourseViewerPage() {
       }
 
       setClassroomId(newClassroomId);
+      leavingIntentionallyRef.current = true;
       router.push(`/classroom/${newClassroomId}`);
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return;
