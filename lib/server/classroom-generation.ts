@@ -44,6 +44,8 @@ export interface GenerateClassroomInput {
   modelString?: string;
   /** Crockford base32 ULID of the course this classroom belongs to, if any. */
   courseUuid?: string;
+  /** Admin-curated topics from /api/courses/{uuid}/syllabus-topics. Empty/absent = freeform. */
+  syllabusTopics?: Array<{ title: string; description: string }>;
 }
 
 export type ClassroomGenerationStep =
@@ -214,8 +216,17 @@ export async function generateClassroom(
   };
 
   const lang = normalizeLanguage(input.language);
+  const curriculumBlock =
+    input.syllabusTopics && input.syllabusTopics.length > 0
+      ? [
+          'Curriculum topics (admin-curated, ordered). Produce scenes covering these in order, expanding on each:',
+          ...input.syllabusTopics.map((t, i) => `${i + 1}. ${t.title} — ${t.description}`),
+        ].join('\n')
+      : '';
   const requirements: UserRequirements = {
-    requirement,
+    requirement: curriculumBlock
+      ? `${curriculumBlock}\n\nStudent-provided requirement:\n${requirement}`
+      : requirement,
     language: lang,
   };
   const pdfText = pdfContent?.text || undefined;
