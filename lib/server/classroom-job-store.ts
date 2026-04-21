@@ -91,11 +91,15 @@ function recordToJob(r: SymfonyClassroomJobRecord): ClassroomGenerationJob {
   if (r.completed_at) job.completedAt = r.completed_at;
   if (r.total_scenes != null) job.totalScenes = r.total_scenes;
   if (r.error) job.error = r.error;
-  if (r.result_classroom_uuid && r.result_url && r.result_scenes_count != null) {
+  // Per §3.10 the backend only persists result_classroom_uuid on the
+  // ClassroomJobEnvelope. result_url and result_scenes_count are nice-to-haves
+  // we send on PATCH; the server does not echo them back, so tolerate their
+  // absence and fall back to the sibling scenes_generated field.
+  if (r.result_classroom_uuid) {
     job.result = {
       classroomId: r.result_classroom_uuid,
-      url: r.result_url,
-      scenesCount: r.result_scenes_count,
+      url: r.result_url ?? '',
+      scenesCount: r.result_scenes_count ?? r.scenes_generated,
     };
   }
   return job;
