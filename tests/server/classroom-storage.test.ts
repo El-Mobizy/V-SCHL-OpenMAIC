@@ -128,6 +128,7 @@ describe('readClassroom', () => {
       stage,
       scenes,
       createdAt: '2026-04-20T00:00:00Z',
+      courseUuid: 'crs-1',
     });
   });
 

@@ -34,6 +34,8 @@ export interface PersistedClassroomData {
   stage: Stage;
   scenes: Scene[];
   createdAt: string;
+  /** Optional ULID of the course this classroom belongs to; null/absent = free-standing. */
+  courseUuid: string | null;
 }
 
 export function isValidClassroomId(id: string): boolean {
@@ -46,6 +48,7 @@ function recordToPersisted(record: ClassroomRecord): PersistedClassroomData {
     stage: record.stage,
     scenes: record.scenes,
     createdAt: record.created_at,
+    courseUuid: record.course_uuid ?? null,
   };
 }
 
@@ -98,6 +101,7 @@ export async function persistClassroom(
     stage: data.stage,
     scenes: data.scenes,
     createdAt: new Date().toISOString(),
+    courseUuid: opts.courseUuid ?? null,
     url: `${baseUrl}/classroom/${data.id}`,
   };
 }

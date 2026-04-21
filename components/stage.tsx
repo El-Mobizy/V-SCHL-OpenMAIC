@@ -42,8 +42,11 @@ import { VisuallyHidden } from 'radix-ui';
  */
 export function Stage({
   onRetryOutline,
+  onScenePlaybackComplete,
 }: {
   onRetryOutline?: (outlineId: string) => Promise<void>;
+  /** Fires when the per-scene PlaybackEngine finishes executing a scene's actions. */
+  onScenePlaybackComplete?: (sceneId: string) => void;
 }) {
   const { t } = useI18n();
   const { mode, getCurrentScene, scenes, currentSceneId, setCurrentSceneId, generatingOutlines } =
@@ -349,6 +352,11 @@ export function Stage({
   ]);
 
   // Initialize playback engine when scene changes
+  const onScenePlaybackCompleteRef = useRef(onScenePlaybackComplete);
+  useEffect(() => {
+    onScenePlaybackCompleteRef.current = onScenePlaybackComplete;
+  }, [onScenePlaybackComplete]);
+
   useEffect(() => {
     // Bump epoch so any stale SSE callbacks from the previous scene are discarded
     sceneEpochRef.current++;
@@ -482,6 +490,9 @@ export function Stage({
       },
       getPlaybackSpeed: () => useSettingsStore.getState().playbackSpeed || 1,
       onComplete: () => {
+        const completedSceneId = useStageStore.getState().currentSceneId;
+        if (completedSceneId) onScenePlaybackCompleteRef.current?.(completedSceneId);
+
         // lectureSpeech intentionally NOT cleared — last sentence stays visible
         // until scene transition (auto-play) or user restarts. Scene change
         // effect handles the reset.
