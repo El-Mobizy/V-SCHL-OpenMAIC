@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import { api } from '@/lib/api/symfony';
 import { Pagination } from '@/components/admin/pagination';
+import { EditQuotaDialog } from '@/components/admin/edit-quota-dialog';
 import type { AdminTokenUsageRow, PaginatedMeta } from '@/lib/types/school';
 
 function joinMeta(
@@ -30,6 +31,8 @@ export function TokenUsageTable() {
   const [meta, setMeta] = useState<PaginatedMeta | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRow, setSelectedRow] = useState<AdminTokenUsageRow | null>(null);
+  const [refresh, setRefresh] = useState(0);
 
   // Debounce the search input, skipping the initial-mount firing so we don't
   // duplicate the page-1 load.
@@ -68,7 +71,7 @@ export function TokenUsageTable() {
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch]);
+  }, [page, debouncedSearch, refresh]);
 
   return (
     <div className="space-y-4">
@@ -136,6 +139,9 @@ export function TokenUsageTable() {
                   <th scope="col" className="px-4 py-2">
                     Last activity
                   </th>
+                  <th scope="col" className="px-4 py-2 text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -159,6 +165,17 @@ export function TokenUsageTable() {
                     >
                       {r.last_activity_at ?? '—'}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedRow(r)}
+                        aria-label={`Edit quota for ${formatName(r.firstname, r.lastname)}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        Edit
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -169,6 +186,25 @@ export function TokenUsageTable() {
 
       {meta && meta.total_pages > 1 && (
         <Pagination meta={meta} onPageChange={(p) => setPage(p)} />
+      )}
+
+      {selectedRow !== null && (
+        <EditQuotaDialog
+          studentUuid={selectedRow.student_uuid}
+          open={selectedRow !== null}
+          onOpenChange={(next) => {
+            if (!next) setSelectedRow(null);
+          }}
+          current={{
+            max_tokens: selectedRow.tokens_max,
+            used_tokens: selectedRow.tokens_used,
+            reset_date: selectedRow.tokens_reset_date,
+          }}
+          onSaved={() => {
+            setSelectedRow(null);
+            setRefresh((n) => n + 1);
+          }}
+        />
       )}
     </div>
   );

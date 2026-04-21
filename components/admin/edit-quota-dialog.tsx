@@ -15,11 +15,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   current: Pick<TokenQuota, 'max_tokens' | 'used_tokens' | 'reset_date'>;
+  onSaved?: () => void;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export function EditQuotaDialog({ studentUuid, open, onOpenChange, current }: Props) {
+export function EditQuotaDialog({ studentUuid, open, onOpenChange, current, onSaved }: Props) {
   const router = useRouter();
   const [maxTokens, setMaxTokens] = useState('');
   const [usedTokens, setUsedTokens] = useState('');
@@ -72,6 +73,7 @@ export function EditQuotaDialog({ studentUuid, open, onOpenChange, current }: Pr
       await api.admin.quota.upsert(studentUuid, patch);
       reset();
       onOpenChange(false);
+      onSaved?.();
       router.refresh();
     } catch (e) {
       if (e instanceof ApiError) {

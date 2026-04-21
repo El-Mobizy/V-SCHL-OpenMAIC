@@ -9,8 +9,15 @@ vi.mock('@/lib/api/symfony', () => ({
       tokenUsage: {
         list: vi.fn(),
       },
+      quota: {
+        upsert: vi.fn(),
+      },
     },
   },
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 import { api } from '@/lib/api/symfony';
@@ -101,5 +108,32 @@ describe('TokenUsageTable', () => {
         screen.getByText(/only lists students who have interacted with the AI integration/i),
       ).toBeInTheDocument();
     });
+  });
+
+  it('clicking the row Edit button opens the dialog with correct initial values', async () => {
+    vi.mocked(api.admin.tokenUsage.list).mockResolvedValueOnce(
+      makeResponse([
+        makeRow({
+          tokens_max: 900000,
+          tokens_used: 12345,
+          tokens_reset_date: '2026-06-15',
+        }),
+      ]),
+    );
+    const user = userEvent.setup({ delay: null });
+    render(<TokenUsageTable />);
+
+    // Wait for the row to render.
+    await screen.findByText(/Lovelace/);
+
+    const editButton = screen.getByRole('button', { name: /edit quota for/i });
+    await user.click(editButton);
+
+    // Dialog should now be open; labels render `current: {value}` from props.
+    await waitFor(() => {
+      expect(screen.getByText(/current:\s*900,000/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/current:\s*12,345/i)).toBeInTheDocument();
+    expect(screen.getByText(/current:\s*2026-06-15/i)).toBeInTheDocument();
   });
 });
