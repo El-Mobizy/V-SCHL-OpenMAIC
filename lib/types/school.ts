@@ -183,3 +183,18 @@ export interface StudentStats {
   tokens_this_month: number;
   last_activity_at: string | null;
 }
+
+export interface AdminTokenUsageRow {
+  student_uuid: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  department: string | null;
+  program: string | null;
+  level: string | null;
+  tokens_used: number;
+  tokens_max: number;
+  tokens_reset_date: string;
+  tokens_this_month: number;
+  last_activity_at: string | null;
+}
