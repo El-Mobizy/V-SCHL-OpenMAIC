@@ -141,7 +141,7 @@ export function BulkQuotaForm() {
         <p className="text-muted-foreground">
           This updates rows that already exist in <code>token_quota</code>. Students who have never
           reported usage have no row yet — their first usage report will create one using the entity
-          default (<strong>100,000</strong>). Rerun this bulk update after new students start using
+          default (<strong>900,000</strong>). Rerun this bulk update after new students start using
           the platform, or edit those students individually from their detail page.
         </p>
       </aside>
