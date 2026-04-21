@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import { ulid } from 'ulid';
 import { callLLM, type LLMMetering } from '@/lib/ai/llm';
 import { tokenCounter } from '@/lib/server/token-counter';
 import { createStageAPI } from '@/lib/api/stage-api';
@@ -312,7 +313,10 @@ export async function generateClassroom(
     totalScenes: outlines.length,
   });
 
-  const stageId = nanoid(10);
+  // Symfony /api/classrooms requires a 26-char Crockford base32 ULID (§3.8),
+  // not a nanoid. Legacy stage ids in IndexedDB stay as-is — we only mint
+  // ULIDs for new classrooms so backend persistence accepts them.
+  const stageId = ulid();
   const stage: Stage = {
     id: stageId,
     name: outlines[0]?.title || requirement.slice(0, 50),
