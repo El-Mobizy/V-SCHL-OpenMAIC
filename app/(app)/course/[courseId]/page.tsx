@@ -22,6 +22,7 @@ import {
 import { cn } from '@/lib/utils';
 import { sanitizeCourseHtml } from '@/lib/utils/sanitize-html';
 import { getModelOverride } from '@/lib/stores/model-override';
+import { useUnloadGuard } from '@/lib/hooks/use-unload-guard';
 
 type ViewState = 'loading' | 'error' | 'generating' | 'ready' | 'configuring';
 type SyllabusRef = { classroomId: string };
@@ -121,6 +122,48 @@ export default function CourseViewerPage() {
 
   const generationLockRef = useRef(false);
   const pollAbortRef = useRef<AbortController | null>(null);
+  const isGenerating = viewState === 'generating';
+
+  useUnloadGuard(
+    isGenerating,
+    'Your classroom is still being generated. Leaving now will cancel it.',
+  );
+
+  // Intercept the browser Back/Forward buttons while generating: push a
+  // sentinel history entry on activation, and re-push it on every popstate
+  // unless the user explicitly confirms leaving.
+  useEffect(() => {
+    if (!isGenerating) return;
+    window.history.pushState(null, '', window.location.href);
+    const onPopState = () => {
+      const leave = window.confirm(
+        'Your classroom is still being generated. Leaving now will cancel it. Continue?',
+      );
+      if (leave) {
+        pollAbortRef.current?.abort();
+        // Pop our sentinel AND the current entry so the user's intended target
+        // is reached on the next natural pop.
+        window.history.back();
+      } else {
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [isGenerating]);
+
+  function confirmLeaveWhileGenerating(): boolean {
+    if (!isGenerating) return true;
+    return window.confirm(
+      'Your classroom is still being generated. Leaving now will cancel it. Continue?',
+    );
+  }
+
+  function handleBack() {
+    if (!confirmLeaveWhileGenerating()) return;
+    pollAbortRef.current?.abort();
+    router.push('/dashboard');
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -307,8 +350,9 @@ export default function CourseViewerPage() {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => router.push('/dashboard')}
+          onClick={handleBack}
           className="shrink-0"
+          aria-label={isGenerating ? 'Leaving will cancel generation' : 'Back to dashboard'}
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
@@ -1197,6 +1241,12 @@ function SyllabusGenerating({
                 style={{ width: `${Math.max(4, progress)}%` }}
               />
             </div>
+            <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>
+                Keep this tab open &mdash; closing or reloading will cancel generation.
+              </span>
+            </p>
           </div>
         </div>
       </div>
