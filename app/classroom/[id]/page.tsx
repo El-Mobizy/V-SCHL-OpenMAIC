@@ -12,6 +12,8 @@ import { useWhiteboardHistoryStore } from '@/lib/store/whiteboard-history';
 import { createLogger } from '@/lib/logger';
 import { MediaStageProvider } from '@/lib/contexts/media-stage-context';
 import { generateMediaForOutlines } from '@/lib/media/media-orchestrator';
+import { useAuthStore, selectStudentUuid } from '@/lib/store/auth';
+import { useProgressReporter } from '@/lib/hooks/use-progress-reporter';
 
 const log = createLogger('Classroom');
 
@@ -23,8 +25,12 @@ export default function ClassroomDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [courseUuid, setCourseUuid] = useState<string | null>(null);
 
   const generationStartedRef = useRef(false);
+  const studentUuid = useAuthStore(selectStudentUuid);
+  const scenes = useStageStore((s) => s.scenes);
+  const { reportCompletion } = useProgressReporter({ studentUuid, courseUuid, scenes });
 
   const { generateRemaining, retrySingleOutline, stop } = useSceneGenerator({
     onComplete: () => {
@@ -44,12 +50,13 @@ export default function ClassroomDetailPage() {
           if (res.ok) {
             const json = await res.json();
             if (json.success && json.classroom) {
-              const { stage, scenes } = json.classroom;
+              const { stage, scenes, courseUuid: loadedCourseUuid } = json.classroom;
               useStageStore.getState().setStage(stage);
               useStageStore.setState({
                 scenes,
                 currentSceneId: scenes[0]?.id ?? null,
               });
+              if (loadedCourseUuid) setCourseUuid(loadedCourseUuid);
               log.info('Loaded from server-side storage:', classroomId);
             }
           }
@@ -195,7 +202,10 @@ export default function ClassroomDetailPage() {
               </div>
             </div>
           ) : (
-            <Stage onRetryOutline={retrySingleOutline} />
+            <Stage
+              onRetryOutline={retrySingleOutline}
+              onScenePlaybackComplete={reportCompletion}
+            />
           )}
         </div>
       </MediaStageProvider>
