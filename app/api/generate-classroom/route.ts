@@ -6,6 +6,7 @@ import { runClassroomGenerationJob } from '@/lib/server/classroom-job-runner';
 import { createClassroomGenerationJob } from '@/lib/server/classroom-job-store';
 import { buildRequestOrigin } from '@/lib/server/classroom-storage';
 import { requireStudentAuth } from '@/lib/server/request-auth';
+import { fetchSyllabusTopicsForPrompt } from '@/lib/server/syllabus-topics-client';
 import { ApiError } from '@/lib/api/errors';
 import { parseModelString } from '@/lib/ai/providers';
 import { resolveClassroomModelString } from '@/lib/server/admin-default-model';
@@ -49,6 +50,14 @@ export async function POST(req: NextRequest) {
 
     if (!requirement) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: requirement');
+    }
+
+    if (body.courseUuid) {
+      const topics = await fetchSyllabusTopicsForPrompt(
+        body.courseUuid,
+        studentAuth.accessToken,
+      );
+      if (topics.length > 0) body.syllabusTopics = topics;
     }
 
     const baseUrl = buildRequestOrigin(req);
