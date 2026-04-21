@@ -8,6 +8,7 @@ const TABS = [
   { href: '/admin/settings/branding', label: 'Branding' },
   { href: '/admin/settings/ai-config', label: 'AI configuration' },
   { href: '/admin/settings/quotas', label: 'Token quotas' },
+  { href: '/admin/settings/token-usage', label: 'Token usage' },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
