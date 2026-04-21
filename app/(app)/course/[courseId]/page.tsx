@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/auth-context';
 import { api } from '@/lib/api/symfony';
 import { ApiError } from '@/lib/api/errors';
-import type { Course, CourseProgress } from '@/lib/types/school';
+import type { Course, CourseProgress, SyllabusTopic } from '@/lib/types/school';
 import { Button } from '@/components/ui/button';
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   AlertCircle,
   PlayCircle,
   Clock,
+  ListChecks,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sanitizeCourseHtml } from '@/lib/utils/sanitize-html';
@@ -112,6 +113,7 @@ export default function CourseViewerPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [classroomId, setClassroomId] = useState<string | null>(null);
   const [progress, setProgress] = useState<CourseProgress | null>(null);
+  const [syllabusTopics, setSyllabusTopics] = useState<SyllabusTopic[]>([]);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [generationStep, setGenerationStep] = useState<string>('Starting');
@@ -146,9 +148,24 @@ export default function CourseViewerPage() {
         } catch (e) {
           if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
         }
+
+        let topics: SyllabusTopic[] = [];
+        try {
+          const topicsRes = await api.courses.syllabusTopics.list(
+            courseUuid,
+            user.student_uuid || undefined,
+          );
+          topics = topicsRes.data ?? [];
+        } catch (e) {
+          if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') {
+            console.warn('[course] Failed to load syllabus topics:', e);
+          }
+        }
+
         if (cancelled) return;
         if (progressData) setProgress(progressData);
         if (existingClassroomId) setClassroomId(existingClassroomId);
+        setSyllabusTopics(topics);
         setViewState('ready');
       } catch (err) {
         if (cancelled) return;
@@ -362,6 +379,8 @@ export default function CourseViewerPage() {
             <CourseDescriptionCard description={course.description} />
 
             {course.objectives && <ObjectivesCard objectives={course.objectives} />}
+
+            {syllabusTopics.length > 0 && <SyllabusTopicsCard topics={syllabusTopics} />}
           </section>
         </div>
       )}
@@ -771,6 +790,66 @@ function ObjectivesCard({ objectives }: { objectives: string }) {
           {objectives}
         </p>
       )}
+    </div>
+  );
+}
+
+function SyllabusTopicsCard({ topics }: { topics: SyllabusTopic[] }) {
+  const ordered = useMemo(
+    () => [...topics].sort((a, b) => a.position - b.position),
+    [topics],
+  );
+  // sanitizeCourseHtml strips script/iframe/event handlers (same helper used by
+  // CourseDescriptionCard above) — safe to pass to dangerouslySetInnerHTML.
+  const sanitized = useMemo(
+    () => ordered.map((t) => sanitizeCourseHtml(t.description ?? '')),
+    [ordered],
+  );
+
+  return (
+    <div className="rounded-2xl border bg-card p-6 lg:p-8 space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="h-8 w-8 rounded-lg bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center">
+          <ListChecks className="h-4 w-4 text-primary" />
+        </div>
+        <h3 className="text-base font-semibold tracking-tight">What you&rsquo;ll cover</h3>
+      </div>
+      <ol className="space-y-2.5">
+        {ordered.map((t, i) => (
+          <li
+            key={t.uuid}
+            className="flex items-start gap-2.5 rounded-lg border bg-background/50 p-3 text-sm leading-relaxed"
+          >
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-semibold text-primary tabular-nums">
+              {i + 1}
+            </span>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="font-medium text-foreground/90">{t.title}</div>
+              {sanitized[i] && (
+                <div
+                  className="topic-html text-xs text-muted-foreground"
+                  dangerouslySetInnerHTML={{ __html: sanitized[i] }}
+                />
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <style jsx>{`
+        .topic-html :global(p) {
+          margin: 0.25rem 0;
+        }
+        .topic-html :global(p:first-child) {
+          margin-top: 0;
+        }
+        .topic-html :global(p:last-child) {
+          margin-bottom: 0;
+        }
+        .topic-html :global(ul),
+        .topic-html :global(ol) {
+          margin: 0.25rem 0 0.25rem 1.25rem;
+        }
+      `}</style>
     </div>
   );
 }
