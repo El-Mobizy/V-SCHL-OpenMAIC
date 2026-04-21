@@ -77,7 +77,7 @@ describe('POST /api/generate-classroom with courseUuid', () => {
 
     expect(res.status).toBe(202);
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(
       'http://symfony.test/api/courses/01HZQK0123456789COURSEABCD/syllabus-topics',
     );
