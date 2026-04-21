@@ -219,6 +219,7 @@ export default function CourseViewerPage() {
           requirement,
           language: 'en-US',
           enableImageGeneration: styleMeta.enableImages,
+          courseUuid: course.uuid,
           ...(modelString ? { modelString } : {}),
         }),
         signal: abort.signal,

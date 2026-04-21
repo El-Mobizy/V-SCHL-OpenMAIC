@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
         : {}),
       ...(rawBody.enableTTS != null ? { enableTTS: rawBody.enableTTS } : {}),
       ...(rawBody.agentMode ? { agentMode: rawBody.agentMode } : {}),
+      ...(rawBody.courseUuid ? { courseUuid: rawBody.courseUuid } : {}),
     };
     const { requirement } = body;
 
@@ -52,7 +53,12 @@ export async function POST(req: NextRequest) {
 
     const baseUrl = buildRequestOrigin(req);
     const jobId = nanoid(10);
-    const job = await createClassroomGenerationJob(jobId, body);
+    const job = await createClassroomGenerationJob(
+      jobId,
+      body,
+      studentAuth.accessToken,
+      studentAuth.studentId,
+    );
     const pollUrl = `${baseUrl}/api/generate-classroom/${jobId}`;
 
     const { providerId } = parseModelString(modelString);

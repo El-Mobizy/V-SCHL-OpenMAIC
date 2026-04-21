@@ -1,8 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { getStudent } from '@/lib/storage/students-cache';
 import { useRecentStudents } from '@/lib/hooks/use-recent-students';
 import type { StudentStats } from '@/lib/types/school';
+import { EditQuotaDialog } from '@/components/admin/edit-quota-dialog';
 
 interface Props {
   ulid: string;
@@ -36,6 +38,7 @@ export function StudentStatsView({ ulid, stats }: Props) {
   const [label, setLabel] = useState<{ primary: string; secondary?: string }>({
     primary: `Student ${truncateUlid(ulid)}`,
   });
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     const cached = getStudent(ulid);
@@ -66,11 +69,24 @@ export function StudentStatsView({ ulid, stats }: Props) {
 
       {stats && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Card
-            title="Token quota"
-            value={numFmt.format(stats.tokens_used)}
-            sub={`of ${numFmt.format(stats.tokens_max)} (resets ${stats.tokens_reset_date})`}
-          />
+          <div className="rounded-lg border bg-card p-4 space-y-1 relative">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Token quota</p>
+              <button
+                type="button"
+                onClick={() => setEditOpen(true)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Edit token quota"
+                title="Edit quota"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="text-2xl font-semibold">{numFmt.format(stats.tokens_used)}</p>
+            <p className="text-xs text-muted-foreground">
+              of {numFmt.format(stats.tokens_max)} (resets {stats.tokens_reset_date})
+            </p>
+          </div>
           <Card
             title="Course activity"
             value={`${stats.courses_in_progress} in progress`}
@@ -90,6 +106,19 @@ export function StudentStatsView({ ulid, stats }: Props) {
             }
           />
         </div>
+      )}
+
+      {stats && (
+        <EditQuotaDialog
+          studentUuid={ulid}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          current={{
+            max_tokens: stats.tokens_max,
+            used_tokens: stats.tokens_used,
+            reset_date: stats.tokens_reset_date,
+          }}
+        />
       )}
     </div>
   );

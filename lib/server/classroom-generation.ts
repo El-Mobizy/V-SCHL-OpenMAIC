@@ -42,6 +42,8 @@ export interface GenerateClassroomInput {
   enableTTS?: boolean;
   agentMode?: 'default' | 'generate';
   modelString?: string;
+  /** Crockford base32 ULID of the course this classroom belongs to, if any. */
+  courseUuid?: string;
 }
 
 export type ClassroomGenerationStep =
@@ -415,6 +417,10 @@ export async function generateClassroom(
     totalScenes: outlines.length,
   });
 
+  if (!options.metering?.accessToken) {
+    throw new Error('Classroom persistence requires an authenticated student access token');
+  }
+
   const persisted = await persistClassroom(
     {
       id: stageId,
@@ -422,6 +428,11 @@ export async function generateClassroom(
       scenes,
     },
     options.baseUrl,
+    {
+      accessToken: options.metering.accessToken,
+      studentUuid: options.metering.studentId,
+      ...(input.courseUuid ? { courseUuid: input.courseUuid } : {}),
+    },
   );
 
   log.info(`Classroom persisted: ${persisted.id}, URL: ${persisted.url}`);

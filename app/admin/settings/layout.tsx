@@ -7,6 +7,7 @@ const TABS = [
   { href: '/admin/settings/api-keys', label: 'API keys' },
   { href: '/admin/settings/branding', label: 'Branding' },
   { href: '/admin/settings/ai-config', label: 'AI configuration' },
+  { href: '/admin/settings/quotas', label: 'Token quotas' },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

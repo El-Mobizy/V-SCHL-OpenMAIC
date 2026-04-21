@@ -20,6 +20,9 @@ import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModel } from '@/lib/server/resolve-model';
 import { extractUser } from '@/lib/auth/jwt';
+import { parseModelString } from '@/lib/ai/providers';
+import type { LLMMetering } from '@/lib/ai/llm';
+import { tokenCounter } from '@/lib/server/token-counter';
 const log = createLogger('Chat API');
 
 // Allow streaming responses up to 60 seconds
@@ -71,18 +74,38 @@ export async function POST(req: NextRequest) {
       return apiError('UNAUTHORIZED', 401, 'Invalid token');
     }
 
-    // Quota enforcement and usage recording is handled by the callLLM/streamLLM
-    // wrapper (Task 14). This route delegates to statelessGenerate which will
-    // eventually pass metering through to the wrapper once Task 17 threads the
-    // student identity through the orchestration library.
-
-    const { model: languageModel, apiKey: resolvedApiKey } = resolveModel({
+    const {
+      model: languageModel,
+      apiKey: resolvedApiKey,
+      modelString: resolvedModelString,
+    } = resolveModel({
       modelString: body.model,
       apiKey: body.apiKey,
       baseUrl: body.baseUrl,
       providerType: body.providerType,
       requiresApiKey: body.requiresApiKey,
     });
+
+    // Build metering for students so the orchestrator's LLM calls flow through
+    // quota enforcement + usage recording. Admins/other roles skip metering.
+    let metering: LLMMetering | undefined;
+    if (authUser.role === 'student' && authUser.student_uuid) {
+      const { providerId } = parseModelString(resolvedModelString);
+      metering = {
+        studentId: authUser.student_uuid,
+        providerId,
+        accessToken,
+      };
+      // Prime the token-counter cache so recordUsage() doesn't silently no-op
+      // on the student's first chat call. Network errors here don't block the
+      // chat; the student just won't be metered until the next successful init.
+      try {
+        await tokenCounter.initQuota(authUser.student_uuid, accessToken);
+      } catch (e) {
+        log.warn('initQuota failed — chat will proceed without metering for this request', e);
+        metering = undefined;
+      }
+    }
 
     if (!resolvedApiKey && body.requiresApiKey !== false) {
       return apiError('MISSING_API_KEY', 401, 'API Key is required');
@@ -134,16 +157,29 @@ export async function POST(req: NextRequest) {
           signal,
           languageModel,
           { enabled: false } satisfies ThinkingConfig,
+          metering,
         );
 
-        for await (const event of generator) {
-          if (signal.aborted) {
-            log.info('Request was aborted');
-            break;
-          }
+        try {
+          for await (const event of generator) {
+            if (signal.aborted) {
+              log.info('Request was aborted');
+              break;
+            }
 
-          const data = `data: ${JSON.stringify(event)}\n\n`;
-          await writer.write(encoder.encode(data));
+            const data = `data: ${JSON.stringify(event)}\n\n`;
+            await writer.write(encoder.encode(data));
+          }
+        } finally {
+          // Ensure trailing usage is flushed even on short sessions (the 10-call
+          // periodic flush would otherwise leave 1–2-message sessions unreported).
+          if (metering) {
+            try {
+              await tokenCounter.flushUsage(metering.studentId);
+            } catch (e) {
+              log.warn('Token usage flush failed (will retry on next LLM call):', e);
+            }
+          }
         }
 
         stopHeartbeat();

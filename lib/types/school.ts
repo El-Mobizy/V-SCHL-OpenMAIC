@@ -42,6 +42,20 @@ export interface TokenQuota {
   reset_date: string;
 }
 
+export interface BulkQuotaRequest {
+  max_tokens: number;
+  reset_date?: string;
+  reset_used_tokens?: boolean;
+}
+
+export interface BulkQuotaResult {
+  ok: true;
+  updated_rows: number;
+  max_tokens: number;
+  reset_date: string | null;
+  reset_used_tokens: boolean;
+}
+
 export interface SchoolBranding {
   logo_url: string;
   primary_color: string;
@@ -137,6 +151,26 @@ export interface AdminStats {
   tokens_today: number;
   tokens_this_week: number;
   tokens_this_month: number;
+}
+
+export interface ClassroomRecord {
+  uuid: string;
+  name: string;
+  student_uuid: string;
+  course_uuid: string | null;
+  stage: import('@/lib/types/stage').Stage;
+  scenes: import('@/lib/types/stage').Scene[];
+  scene_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClassroomSummary {
+  uuid: string;
+  name: string;
+  course_uuid: string | null;
+  scene_count: number;
+  updated_at: string;
 }
 
 export interface StudentStats {

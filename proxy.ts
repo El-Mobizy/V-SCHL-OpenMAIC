@@ -1,10 +1,9 @@
-// middleware.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/api/auth'];
 const STATIC_PREFIXES = ['/_next', '/favicon.ico', '/avatars', '/logos', '/logo'];
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Skip static assets and public paths

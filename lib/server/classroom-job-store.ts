@@ -1,16 +1,13 @@
-import { promises as fs } from 'fs';
-import path from 'path';
 import type {
   ClassroomGenerationProgress,
   ClassroomGenerationStep,
   GenerateClassroomInput,
   GenerateClassroomResult,
 } from '@/lib/server/classroom-generation';
-import {
-  CLASSROOM_JOBS_DIR,
-  ensureClassroomJobsDir,
-  writeJsonFileAtomic,
-} from '@/lib/server/classroom-storage';
+
+function symfonyBaseUrl(): string {
+  return process.env.SYMFONY_API_URL || '';
+}
 
 export type ClassroomGenerationJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
@@ -41,8 +38,23 @@ export interface ClassroomGenerationJob {
   error?: string;
 }
 
-function jobFilePath(jobId: string) {
-  return path.join(CLASSROOM_JOBS_DIR, `${jobId}.json`);
+interface SymfonyClassroomJobRecord {
+  job_id: string;
+  status: ClassroomGenerationJobStatus;
+  step: string;
+  progress: number;
+  message: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  input_summary?: ClassroomGenerationJob['inputSummary'] | null;
+  scenes_generated: number;
+  total_scenes?: number | null;
+  result_classroom_uuid?: string | null;
+  result_url?: string | null;
+  result_scenes_count?: number | null;
+  error?: string | null;
 }
 
 function buildInputSummary(input: GenerateClassroomInput): ClassroomGenerationJob['inputSummary'] {
@@ -56,43 +68,52 @@ function buildInputSummary(input: GenerateClassroomInput): ClassroomGenerationJo
   };
 }
 
-/** Simple per-job mutex to serialize read-modify-write on the same job file. */
-const jobLocks = new Map<string, Promise<void>>();
-
-async function withJobLock<T>(jobId: string, fn: () => Promise<T>): Promise<T> {
-  const prev = jobLocks.get(jobId) ?? Promise.resolve();
-  let resolve: () => void;
-  const next = new Promise<void>((r) => {
-    resolve = r;
-  });
-  jobLocks.set(jobId, next);
-  try {
-    await prev;
-    return await fn();
-  } finally {
-    resolve!();
-    if (jobLocks.get(jobId) === next) jobLocks.delete(jobId);
-  }
-}
-
-/** Max age (ms) before a "running" job without an active runner is considered stale. */
-const STALE_JOB_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-
-function markStaleIfNeeded(job: ClassroomGenerationJob): ClassroomGenerationJob {
-  if (job.status !== 'running') return job;
-  const updatedAt = new Date(job.updatedAt).getTime();
-  if (Date.now() - updatedAt > STALE_JOB_TIMEOUT_MS) {
-    return {
-      ...job,
-      status: 'failed',
-      step: 'failed',
-      message: 'Job appears stale (no progress update for 30 minutes)',
-      error: 'Stale job: process may have restarted during generation',
-      completedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+function recordToJob(r: SymfonyClassroomJobRecord): ClassroomGenerationJob {
+  const job: ClassroomGenerationJob = {
+    id: r.job_id,
+    status: r.status,
+    step: r.step as ClassroomGenerationJob['step'],
+    progress: r.progress,
+    message: r.message,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    inputSummary:
+      r.input_summary ?? {
+        requirementPreview: '',
+        language: 'zh-CN',
+        hasPdf: false,
+        pdfTextLength: 0,
+        pdfImageCount: 0,
+      },
+    scenesGenerated: r.scenes_generated,
+  };
+  if (r.started_at) job.startedAt = r.started_at;
+  if (r.completed_at) job.completedAt = r.completed_at;
+  if (r.total_scenes != null) job.totalScenes = r.total_scenes;
+  if (r.error) job.error = r.error;
+  if (r.result_classroom_uuid && r.result_url && r.result_scenes_count != null) {
+    job.result = {
+      classroomId: r.result_classroom_uuid,
+      url: r.result_url,
+      scenesCount: r.result_scenes_count,
     };
   }
   return job;
+}
+
+async function symfonyJobFetch(
+  path: string,
+  accessToken: string,
+  init?: RequestInit,
+): Promise<Response> {
+  return fetch(`${symfonyBaseUrl()}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
+    },
+  });
 }
 
 export function isValidClassroomJobId(jobId: string): boolean {
@@ -102,125 +123,114 @@ export function isValidClassroomJobId(jobId: string): boolean {
 export async function createClassroomGenerationJob(
   jobId: string,
   input: GenerateClassroomInput,
+  accessToken: string,
+  studentUuid: string,
 ): Promise<ClassroomGenerationJob> {
-  const now = new Date().toISOString();
-  const job: ClassroomGenerationJob = {
-    id: jobId,
-    status: 'queued',
-    step: 'queued',
-    progress: 0,
-    message: 'Classroom generation job queued',
-    createdAt: now,
-    updatedAt: now,
-    inputSummary: buildInputSummary(input),
-    scenesGenerated: 0,
-  };
-
-  await ensureClassroomJobsDir();
-  await writeJsonFileAtomic(jobFilePath(jobId), job);
-  return job;
+  const res = await symfonyJobFetch(`/api/classroom-jobs`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({
+      job_id: jobId,
+      student_uuid: studentUuid,
+      input_summary: buildInputSummary(input),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Create classroom job failed: ${res.status}`);
+  }
+  const body = (await res.json()) as SymfonyClassroomJobRecord;
+  return recordToJob(body);
 }
 
 export async function readClassroomGenerationJob(
   jobId: string,
+  accessToken: string,
 ): Promise<ClassroomGenerationJob | null> {
-  try {
-    const content = await fs.readFile(jobFilePath(jobId), 'utf-8');
-    const job = JSON.parse(content) as ClassroomGenerationJob;
-    return markStaleIfNeeded(job);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null;
-    }
-    throw error;
+  const res = await symfonyJobFetch(
+    `/api/classroom-jobs/${encodeURIComponent(jobId)}`,
+    accessToken,
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Read classroom job failed: ${res.status}`);
   }
+  const body = (await res.json()) as SymfonyClassroomJobRecord;
+  return recordToJob(body);
 }
 
-export async function updateClassroomGenerationJob(
+async function patchJob(
   jobId: string,
-  patch: Partial<ClassroomGenerationJob>,
+  accessToken: string,
+  patch: Record<string, unknown>,
 ): Promise<ClassroomGenerationJob> {
-  return withJobLock(jobId, async () => {
-    const existing = await readClassroomGenerationJob(jobId);
-    if (!existing) {
-      throw new Error(`Classroom generation job not found: ${jobId}`);
-    }
-
-    const updated: ClassroomGenerationJob = {
-      ...existing,
-      ...patch,
-      updatedAt: new Date().toISOString(),
-    };
-
-    await writeJsonFileAtomic(jobFilePath(jobId), updated);
-    return updated;
-  });
+  const res = await symfonyJobFetch(
+    `/api/classroom-jobs/${encodeURIComponent(jobId)}`,
+    accessToken,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`Update classroom job failed: ${res.status}`);
+  }
+  const body = (await res.json()) as SymfonyClassroomJobRecord;
+  return recordToJob(body);
 }
 
 export async function markClassroomGenerationJobRunning(
   jobId: string,
+  accessToken: string,
 ): Promise<ClassroomGenerationJob> {
-  return withJobLock(jobId, async () => {
-    const existing = await readClassroomGenerationJob(jobId);
-    if (!existing) {
-      throw new Error(`Classroom generation job not found: ${jobId}`);
-    }
-
-    const updated: ClassroomGenerationJob = {
-      ...existing,
-      status: 'running',
-      startedAt: existing.startedAt || new Date().toISOString(),
-      message: 'Classroom generation started',
-      updatedAt: new Date().toISOString(),
-    };
-
-    await writeJsonFileAtomic(jobFilePath(jobId), updated);
-    return updated;
+  return patchJob(jobId, accessToken, {
+    status: 'running',
+    started_at: new Date().toISOString(),
+    message: 'Classroom generation started',
   });
 }
 
 export async function updateClassroomGenerationJobProgress(
   jobId: string,
   progress: ClassroomGenerationProgress,
+  accessToken: string,
 ): Promise<ClassroomGenerationJob> {
-  return updateClassroomGenerationJob(jobId, {
+  return patchJob(jobId, accessToken, {
     status: 'running',
     step: progress.step,
     progress: progress.progress,
     message: progress.message,
-    scenesGenerated: progress.scenesGenerated,
-    totalScenes: progress.totalScenes,
+    scenes_generated: progress.scenesGenerated,
+    ...(progress.totalScenes != null ? { total_scenes: progress.totalScenes } : {}),
   });
 }
 
 export async function markClassroomGenerationJobSucceeded(
   jobId: string,
   result: GenerateClassroomResult,
+  accessToken: string,
 ): Promise<ClassroomGenerationJob> {
-  return updateClassroomGenerationJob(jobId, {
+  return patchJob(jobId, accessToken, {
     status: 'succeeded',
     step: 'completed',
     progress: 100,
     message: 'Classroom generation completed',
-    completedAt: new Date().toISOString(),
-    scenesGenerated: result.scenesCount,
-    result: {
-      classroomId: result.id,
-      url: result.url,
-      scenesCount: result.scenesCount,
-    },
+    completed_at: new Date().toISOString(),
+    scenes_generated: result.scenesCount,
+    result_classroom_uuid: result.id,
+    result_url: result.url,
+    result_scenes_count: result.scenesCount,
   });
 }
 
 export async function markClassroomGenerationJobFailed(
   jobId: string,
   error: string,
+  accessToken: string,
 ): Promise<ClassroomGenerationJob> {
-  return updateClassroomGenerationJob(jobId, {
+  return patchJob(jobId, accessToken, {
     status: 'failed',
     step: 'failed',
     message: 'Classroom generation failed',
-    completedAt: new Date().toISOString(),
+    completed_at: new Date().toISOString(),
     error,
   });
 }

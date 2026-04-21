@@ -2,9 +2,18 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import type { NextRequest } from 'next/server';
 import type { Scene, Stage } from '@/lib/types/stage';
+import type { ClassroomRecord } from '@/lib/types/school';
 
+function symfonyBaseUrl(): string {
+  return process.env.SYMFONY_API_URL || '';
+}
+
+/**
+ * Root directory for classroom-scoped media (images, audio, video).
+ * Classroom JSON itself now lives in Symfony (see persistClassroom/readClassroom).
+ * Media blobs remain on the filesystem until a separate plan migrates them.
+ */
 export const CLASSROOMS_DIR = path.join(process.cwd(), 'data', 'classrooms');
-export const CLASSROOM_JOBS_DIR = path.join(process.cwd(), 'data', 'classroom-jobs');
 
 async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
@@ -12,20 +21,6 @@ async function ensureDir(dir: string) {
 
 export async function ensureClassroomsDir() {
   await ensureDir(CLASSROOMS_DIR);
-}
-
-export async function ensureClassroomJobsDir() {
-  await ensureDir(CLASSROOM_JOBS_DIR);
-}
-
-export async function writeJsonFileAtomic(filePath: string, data: unknown) {
-  const dir = path.dirname(filePath);
-  await ensureDir(dir);
-
-  const tempFilePath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  const content = JSON.stringify(data, null, 2);
-  await fs.writeFile(tempFilePath, content, 'utf-8');
-  await fs.rename(tempFilePath, filePath);
 }
 
 export function buildRequestOrigin(req: NextRequest): string {
@@ -45,40 +40,64 @@ export function isValidClassroomId(id: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(id);
 }
 
-export async function readClassroom(id: string): Promise<PersistedClassroomData | null> {
-  const filePath = path.join(CLASSROOMS_DIR, `${id}.json`);
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content) as PersistedClassroomData;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null;
-    }
-    throw error;
+function recordToPersisted(record: ClassroomRecord): PersistedClassroomData {
+  return {
+    id: record.uuid,
+    stage: record.stage,
+    scenes: record.scenes,
+    createdAt: record.created_at,
+  };
+}
+
+export async function readClassroom(
+  id: string,
+  accessToken: string,
+): Promise<PersistedClassroomData | null> {
+  const res = await fetch(`${symfonyBaseUrl()}/api/classrooms/${encodeURIComponent(id)}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Read classroom failed: ${res.status}`);
   }
+  const body = (await res.json()) as ClassroomRecord;
+  return recordToPersisted(body);
 }
 
 export async function persistClassroom(
-  data: {
-    id: string;
-    stage: Stage;
-    scenes: Scene[];
-  },
+  data: { id: string; stage: Stage; scenes: Scene[] },
   baseUrl: string,
+  opts: { studentUuid?: string; courseUuid?: string; accessToken: string },
 ): Promise<PersistedClassroomData & { url: string }> {
-  const classroomData: PersistedClassroomData = {
+  const payload: Record<string, unknown> = {
+    uuid: data.id,
+    name: data.stage.name || data.id,
+    stage: data.stage,
+    scenes: data.scenes,
+  };
+  if (opts.studentUuid) payload.student_uuid = opts.studentUuid;
+  if (opts.courseUuid) payload.course_uuid = opts.courseUuid;
+
+  const res = await fetch(`${symfonyBaseUrl()}/api/classrooms`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${opts.accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Persist classroom failed: ${res.status}`);
+  }
+
+  return {
     id: data.id,
     stage: data.stage,
     scenes: data.scenes,
     createdAt: new Date().toISOString(),
-  };
-
-  await ensureClassroomsDir();
-  const filePath = path.join(CLASSROOMS_DIR, `${data.id}.json`);
-  await writeJsonFileAtomic(filePath, classroomData);
-
-  return {
-    ...classroomData,
     url: `${baseUrl}/classroom/${data.id}`,
   };
 }

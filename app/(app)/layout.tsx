@@ -9,6 +9,7 @@ import { useBranding } from '@/lib/hooks/use-branding';
 import { useTheme } from '@/lib/hooks/use-theme';
 import { SiteFooter } from '@/components/site-footer';
 import { ModelOverridePicker } from '@/components/model-override-picker';
+import { TokenUsageOrb } from '@/components/token-usage-orb';
 
 const THEME_CYCLE = ['light', 'dark', 'system'] as const;
 
@@ -63,6 +64,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       </header>
       <main className="flex-1 w-full max-w-6xl mx-auto p-6">{children}</main>
       <SiteFooter />
+      {user?.role === 'student' && <TokenUsageOrb />}
     </div>
   );
 }

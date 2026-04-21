@@ -13,6 +13,10 @@ import type {
   Student,
   AdminStats,
   StudentStats,
+  ClassroomRecord,
+  ClassroomSummary,
+  BulkQuotaRequest,
+  BulkQuotaResult,
 } from '@/lib/types/school';
 
 async function bff<T>(path: string, init?: RequestInit): Promise<T> {
@@ -144,6 +148,18 @@ export const api = {
       list: () => bff<ProviderCatalogEntry[]>(`/admin/provider-catalog`),
     },
     stats: () => bff<AdminStats>(`/admin/stats`),
+    quota: {
+      upsert: (studentUuid: string, patch: Partial<TokenQuota>) =>
+        bff<TokenQuota>(`/token-usage/${studentUuid}/quota`, {
+          method: 'PUT',
+          body: JSON.stringify(patch),
+        }),
+      setDefault: (body: BulkQuotaRequest) =>
+        bff<BulkQuotaResult>(`/admin/quota/default`, {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        }),
+    },
     branding: {
       update: (
         patch: Partial<
@@ -170,6 +186,35 @@ export const api = {
 
   providers: { list: () => bff<AvailableProvider[]>(`/providers`) },
   school: { branding: () => bff<SchoolBranding>(`/school/branding`) },
+
+  classrooms: {
+    get: (uuid: string) => bff<ClassroomRecord>(`/classrooms/${uuid}`),
+    upsert: (payload: Partial<ClassroomRecord> & { uuid: string }) =>
+      bff<{ ok: true; uuid: string }>(`/classrooms`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    remove: (uuid: string) =>
+      bff<{ ok: true }>(`/classrooms/${uuid}`, { method: 'DELETE' }),
+    list: (
+      opts: {
+        studentUuid?: string;
+        courseUuid?: string;
+        page?: number;
+        limit?: number;
+      } = {},
+    ) => {
+      const qs = buildQuery({
+        student: opts.studentUuid,
+        course: opts.courseUuid,
+        page: opts.page,
+        limit: opts.limit,
+      });
+      return bff<PaginatedResponse<ClassroomSummary>>(
+        `/classrooms${qs ? `?${qs}` : ''}`,
+      );
+    },
+  },
 };
 
 export type Api = typeof api;

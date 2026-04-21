@@ -12,7 +12,7 @@ import { CallbackManagerForLLMRun } from '@langchain/core/callbacks/manager';
 import { ChatResult } from '@langchain/core/outputs';
 import type { LanguageModel } from 'ai';
 
-import { callLLM, streamLLM } from '@/lib/ai/llm';
+import { callLLM, streamLLM, type LLMMetering } from '@/lib/ai/llm';
 import type { ThinkingConfig } from '@/lib/types/provider';
 import { createLogger } from '@/lib/logger';
 
@@ -43,11 +43,13 @@ export type StreamChunk =
 export class AISdkLangGraphAdapter extends BaseChatModel {
   private languageModel: LanguageModel;
   private thinking?: ThinkingConfig;
+  private metering?: LLMMetering;
 
-  constructor(languageModel: LanguageModel, thinking?: ThinkingConfig) {
+  constructor(languageModel: LanguageModel, thinking?: ThinkingConfig, metering?: LLMMetering) {
     super({});
     this.languageModel = languageModel;
     this.thinking = thinking;
+    this.metering = metering;
   }
 
   _llmType(): string {
@@ -93,6 +95,7 @@ export class AISdkLangGraphAdapter extends BaseChatModel {
         'chat-adapter',
         undefined,
         this.thinking,
+        this.metering,
       );
 
       const content = result.text || '';
@@ -139,6 +142,7 @@ export class AISdkLangGraphAdapter extends BaseChatModel {
       },
       'chat-adapter-stream',
       this.thinking,
+      this.metering,
     );
 
     let fullContent = '';
