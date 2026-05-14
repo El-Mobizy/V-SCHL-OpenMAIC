@@ -305,6 +305,31 @@ export function resolveProxy(providerId: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Symfony key map helpers (for TTS/ASR/Image/Video — which admins configure
+// in the Symfony admin UI, not in YAML/env).
+// ---------------------------------------------------------------------------
+
+/** Return Symfony-configured key entries keyed by provider id (cached). */
+async function getSymfonyKeyMap(): Promise<Record<string, { apiKey: string; baseUrl?: string }>> {
+  return getSymfonyKeys();
+}
+
+function mergeSymfonyProviders(
+  base: Record<string, { baseUrl?: string }>,
+  knownIds: Iterable<string>,
+  symfony: Record<string, { apiKey: string; baseUrl?: string }>,
+): Record<string, { baseUrl?: string }> {
+  const result: Record<string, { baseUrl?: string }> = { ...base };
+  for (const id of knownIds) {
+    const entry = symfony[id];
+    if (!entry?.apiKey) continue;
+    if (result[id]) continue;
+    result[id] = entry.baseUrl ? { baseUrl: entry.baseUrl } : {};
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Public API — TTS
 // ---------------------------------------------------------------------------
 
@@ -318,14 +343,43 @@ export function getServerTTSProviders(): Record<string, { baseUrl?: string }> {
   return result;
 }
 
+export async function getServerTTSProvidersAsync(): Promise<Record<string, { baseUrl?: string }>> {
+  const { TTS_PROVIDERS } = await import('@/lib/audio/constants');
+  const base = getServerTTSProviders();
+  const symfony = await getSymfonyKeyMap();
+  return mergeSymfonyProviders(base, Object.keys(TTS_PROVIDERS), symfony);
+}
+
 export function resolveTTSApiKey(providerId: string, clientKey?: string): string {
   if (clientKey) return clientKey;
   return getConfig().tts[providerId]?.apiKey || '';
 }
 
+export async function resolveTTSApiKeyAsync(
+  providerId: string,
+  clientKey?: string,
+): Promise<string> {
+  if (clientKey) return clientKey;
+  const local = getConfig().tts[providerId]?.apiKey;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.apiKey ?? '';
+}
+
 export function resolveTTSBaseUrl(providerId: string, clientBaseUrl?: string): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
   return getConfig().tts[providerId]?.baseUrl;
+}
+
+export async function resolveTTSBaseUrlAsync(
+  providerId: string,
+  clientBaseUrl?: string,
+): Promise<string | undefined> {
+  if (clientBaseUrl) return clientBaseUrl;
+  const local = getConfig().tts[providerId]?.baseUrl;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.baseUrl;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,14 +396,43 @@ export function getServerASRProviders(): Record<string, { baseUrl?: string }> {
   return result;
 }
 
+export async function getServerASRProvidersAsync(): Promise<Record<string, { baseUrl?: string }>> {
+  const { ASR_PROVIDERS } = await import('@/lib/audio/constants');
+  const base = getServerASRProviders();
+  const symfony = await getSymfonyKeyMap();
+  return mergeSymfonyProviders(base, Object.keys(ASR_PROVIDERS), symfony);
+}
+
 export function resolveASRApiKey(providerId: string, clientKey?: string): string {
   if (clientKey) return clientKey;
   return getConfig().asr[providerId]?.apiKey || '';
 }
 
+export async function resolveASRApiKeyAsync(
+  providerId: string,
+  clientKey?: string,
+): Promise<string> {
+  if (clientKey) return clientKey;
+  const local = getConfig().asr[providerId]?.apiKey;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.apiKey ?? '';
+}
+
 export function resolveASRBaseUrl(providerId: string, clientBaseUrl?: string): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
   return getConfig().asr[providerId]?.baseUrl;
+}
+
+export async function resolveASRBaseUrlAsync(
+  providerId: string,
+  clientBaseUrl?: string,
+): Promise<string | undefined> {
+  if (clientBaseUrl) return clientBaseUrl;
+  const local = getConfig().asr[providerId]?.baseUrl;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.baseUrl;
 }
 
 // ---------------------------------------------------------------------------
@@ -389,9 +472,33 @@ export function getServerImageProviders(): Record<string, Record<string, never>>
   return result;
 }
 
+export async function getServerImageProvidersAsync(): Promise<
+  Record<string, Record<string, never>>
+> {
+  const { IMAGE_PROVIDERS } = await import('@/lib/media/image-providers');
+  const base = getServerImageProviders();
+  const symfony = await getSymfonyKeyMap();
+  const merged = { ...base };
+  for (const id of Object.keys(IMAGE_PROVIDERS)) {
+    if (!merged[id] && symfony[id]?.apiKey) merged[id] = {};
+  }
+  return merged;
+}
+
 export function resolveImageApiKey(providerId: string, clientKey?: string): string {
   if (clientKey) return clientKey;
   return getConfig().image[providerId]?.apiKey || '';
+}
+
+export async function resolveImageApiKeyAsync(
+  providerId: string,
+  clientKey?: string,
+): Promise<string> {
+  if (clientKey) return clientKey;
+  const local = getConfig().image[providerId]?.apiKey;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.apiKey ?? '';
 }
 
 export function resolveImageBaseUrl(
@@ -400,6 +507,17 @@ export function resolveImageBaseUrl(
 ): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
   return getConfig().image[providerId]?.baseUrl;
+}
+
+export async function resolveImageBaseUrlAsync(
+  providerId: string,
+  clientBaseUrl?: string,
+): Promise<string | undefined> {
+  if (clientBaseUrl) return clientBaseUrl;
+  const local = getConfig().image[providerId]?.baseUrl;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.baseUrl;
 }
 
 // ---------------------------------------------------------------------------
@@ -415,9 +533,33 @@ export function getServerVideoProviders(): Record<string, Record<string, never>>
   return result;
 }
 
+export async function getServerVideoProvidersAsync(): Promise<
+  Record<string, Record<string, never>>
+> {
+  const { VIDEO_PROVIDERS } = await import('@/lib/media/video-providers');
+  const base = getServerVideoProviders();
+  const symfony = await getSymfonyKeyMap();
+  const merged = { ...base };
+  for (const id of Object.keys(VIDEO_PROVIDERS)) {
+    if (!merged[id] && symfony[id]?.apiKey) merged[id] = {};
+  }
+  return merged;
+}
+
 export function resolveVideoApiKey(providerId: string, clientKey?: string): string {
   if (clientKey) return clientKey;
   return getConfig().video[providerId]?.apiKey || '';
+}
+
+export async function resolveVideoApiKeyAsync(
+  providerId: string,
+  clientKey?: string,
+): Promise<string> {
+  if (clientKey) return clientKey;
+  const local = getConfig().video[providerId]?.apiKey;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.apiKey ?? '';
 }
 
 export function resolveVideoBaseUrl(
@@ -426,6 +568,17 @@ export function resolveVideoBaseUrl(
 ): string | undefined {
   if (clientBaseUrl) return clientBaseUrl;
   return getConfig().video[providerId]?.baseUrl;
+}
+
+export async function resolveVideoBaseUrlAsync(
+  providerId: string,
+  clientBaseUrl?: string,
+): Promise<string | undefined> {
+  if (clientBaseUrl) return clientBaseUrl;
+  const local = getConfig().video[providerId]?.baseUrl;
+  if (local) return local;
+  const symfony = await getSymfonyKeyMap();
+  return symfony[providerId]?.baseUrl;
 }
 
 // ---------------------------------------------------------------------------

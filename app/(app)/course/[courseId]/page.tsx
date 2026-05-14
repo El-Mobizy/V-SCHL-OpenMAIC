@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { sanitizeCourseHtml } from '@/lib/utils/sanitize-html';
 import { getModelOverride } from '@/lib/stores/model-override';
 import { useUnloadGuard } from '@/lib/hooks/use-unload-guard';
+import { toast } from 'sonner';
 
 type ViewState = 'loading' | 'error' | 'generating' | 'ready' | 'configuring';
 type SyllabusRef = { classroomId: string };
@@ -300,6 +301,7 @@ export default function CourseViewerPage() {
       if (!pollUrl) throw new Error('No pollUrl returned');
 
       let newClassroomId: string | null = null;
+      const featureWarnings: string[] = [];
       while (!newClassroomId) {
         await new Promise((r) => setTimeout(r, 5000));
         if (abort.signal.aborted) throw new Error('Cancelled');
@@ -308,7 +310,12 @@ export default function CourseViewerPage() {
         if (!pollRes.ok) throw new Error('Poll failed');
         const status = await pollRes.json();
 
-        if (typeof status.message === 'string') setGenerationStep(status.message);
+        if (typeof status.message === 'string') {
+          setGenerationStep(status.message);
+          if (status.message.startsWith('Heads up') && !featureWarnings.includes(status.message)) {
+            featureWarnings.push(status.message);
+          }
+        }
         if (typeof status.progress === 'number') {
           setGenerationProgress(Math.max(0, Math.min(100, status.progress)));
         }
@@ -319,6 +326,10 @@ export default function CourseViewerPage() {
         } else if (status.status === 'failed') {
           throw new Error(status.error ?? 'Generation failed');
         }
+      }
+
+      for (const warning of featureWarnings) {
+        toast.warning(warning);
       }
 
       try {

@@ -74,6 +74,11 @@ export interface GenerateClassroomResult {
   scenes: Scene[];
   scenesCount: number;
   createdAt: string;
+  /**
+   * Features the student requested but couldn't be produced because the school
+   * admin hasn't configured a provider. UI surfaces these as friendly toasts.
+   */
+  notConfigured?: Array<'tts' | 'image' | 'video'>;
 }
 
 function createInMemoryStore(stage: Stage): StageStore {
@@ -387,6 +392,8 @@ export async function generateClassroom(
     throw new Error('No scenes were generated');
   }
 
+  const notConfigured: Array<'tts' | 'image' | 'video'> = [];
+
   // Phase: Media generation (after all scenes generated)
   if (input.enableImageGeneration || input.enableVideoGeneration) {
     await options.onProgress?.({
@@ -398,9 +405,28 @@ export async function generateClassroom(
     });
 
     try {
-      const mediaMap = await generateMediaForClassroom(outlines, stageId, options.baseUrl);
-      replaceMediaPlaceholders(scenes, mediaMap);
-      log.info(`Media generation complete: ${Object.keys(mediaMap).length} files`);
+      const mediaReport = await generateMediaForClassroom(outlines, stageId, options.baseUrl, {
+        studentId: options.metering?.studentId,
+      });
+      replaceMediaPlaceholders(scenes, mediaReport.mediaMap);
+      for (const f of mediaReport.notConfigured) {
+        if (f === 'image' && input.enableImageGeneration) notConfigured.push('image');
+        if (f === 'video' && input.enableVideoGeneration) notConfigured.push('video');
+      }
+      if (mediaReport.notConfigured.length > 0) {
+        await options.onProgress?.({
+          step: 'generating_media',
+          progress: 93,
+          message: `Heads up — ${mediaReport.notConfigured
+            .map((f) => (f === 'image' ? 'Image Generation' : 'Video Generation'))
+            .join(' and ')} not activated by your school yet.`,
+          scenesGenerated: scenes.length,
+          totalScenes: outlines.length,
+        });
+      }
+      log.info(
+        `Media generation complete: ${mediaReport.generated.images} images, ${mediaReport.generated.videos} videos`,
+      );
     } catch (err) {
       log.warn('Media generation phase failed, continuing:', err);
     }
@@ -417,8 +443,22 @@ export async function generateClassroom(
     });
 
     try {
-      await generateTTSForClassroom(scenes, stageId, options.baseUrl);
-      log.info('TTS generation complete');
+      const ttsReport = await generateTTSForClassroom(scenes, stageId, options.baseUrl, {
+        studentId: options.metering?.studentId,
+      });
+      if (ttsReport.notConfigured) {
+        notConfigured.push('tts');
+        await options.onProgress?.({
+          step: 'generating_tts',
+          progress: 96,
+          message: 'Heads up — Teacher voice (Text-to-Speech) not activated by your school yet.',
+          scenesGenerated: scenes.length,
+          totalScenes: outlines.length,
+        });
+      }
+      log.info(
+        `TTS generation complete: ${ttsReport.actionsSynthesized} actions, ${ttsReport.charactersSynthesized} chars`,
+      );
     } catch (err) {
       log.warn('TTS generation phase failed, continuing:', err);
     }
@@ -475,5 +515,6 @@ export async function generateClassroom(
     scenes,
     scenesCount: scenes.length,
     createdAt: persisted.createdAt,
+    ...(notConfigured.length > 0 ? { notConfigured } : {}),
   };
 }

@@ -54,6 +54,7 @@ import type { ASRProviderId } from '@/lib/audio/types';
 import { WebSearchSettings } from './web-search-settings';
 import { WEB_SEARCH_PROVIDERS } from '@/lib/web-search/constants';
 import type { WebSearchProviderId } from '@/lib/web-search/types';
+import { FeaturesSettings } from './features-settings';
 import { GeneralSettings } from './general-settings';
 import { ModelEditDialog } from './model-edit-dialog';
 import { AddProviderDialog, type NewProviderData } from './add-provider-dialog';
@@ -208,7 +209,7 @@ export function SettingsBody({ initialSection, onClose }: SettingsBodyProps) {
 
   // Navigation
   const [activeSection, setActiveSection] = useState<SettingsSection>(
-    initialSection ?? (isAdmin ? 'providers' : 'general'),
+    initialSection ?? (isAdmin ? 'providers' : 'features'),
   );
   const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>(providerId);
   const [selectedPdfProviderId, setSelectedPdfProviderId] = useState<PDFProviderId>(pdfProviderId);
@@ -485,6 +486,8 @@ export function SettingsBody({ initialSection, onClose }: SettingsBodyProps) {
   // Get header content based on section
   const getHeaderContent = () => {
     switch (activeSection) {
+      case 'features':
+        return <h2 className="text-lg font-semibold">{t('settings.featureToggles')}</h2>;
       case 'general':
         return <h2 className="text-lg font-semibold">{t('settings.systemSettings')}</h2>;
       case 'providers':
@@ -651,6 +654,19 @@ export function SettingsBody({ initialSection, onClose }: SettingsBodyProps) {
       <div className="flex h-full overflow-hidden">
         {/* Left Sidebar - Navigation */}
         <div className="flex-shrink-0 bg-muted/30 p-3 space-y-1" style={{ width: sidebarWidth }}>
+          <button
+            onClick={() => setActiveSection('features')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors text-left min-w-0',
+              activeSection === 'features'
+                ? 'bg-primary/10 text-primary font-medium'
+                : 'hover:bg-muted',
+            )}
+          >
+            <Volume2 className="h-4 w-4 shrink-0" />
+            <span className="truncate">{t('settings.featureToggles')}</span>
+          </button>
+
           {isAdmin && (
             <button
               onClick={() => setActiveSection('providers')}
@@ -951,6 +967,7 @@ export function SettingsBody({ initialSection, onClose }: SettingsBodyProps) {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-5">
+            {activeSection === 'features' && <FeaturesSettings />}
             {activeSection === 'general' && <GeneralSettings />}
 
             {isAdmin && activeSection === 'providers' && selectedProvider && (

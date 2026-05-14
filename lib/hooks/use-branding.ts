@@ -7,7 +7,7 @@ export function useBranding() {
   const { branding, isLoaded } = useBrandingContext();
   return {
     logoUrl: resolveBrandingAssetUrl(branding?.logo_url) || '/logo-horizontal.png',
-    schoolName: branding?.school_name ?? 'OpenMAIC',
+    schoolName: branding?.school_name ?? 'DV-CLASS',
     primaryColor: branding?.primary_color ?? '#722ed1',
     secondaryColor: branding?.secondary_color,
     accentColor: branding?.accent_color,

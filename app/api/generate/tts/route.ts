@@ -9,11 +9,17 @@
 
 import { NextRequest } from 'next/server';
 import { generateTTS } from '@/lib/audio/tts-providers';
-import { resolveTTSApiKey, resolveTTSBaseUrl } from '@/lib/server/provider-config';
+import {
+  resolveTTSApiKeyAsync,
+  resolveTTSBaseUrlAsync,
+} from '@/lib/server/provider-config';
 import type { TTSProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { extractUser } from '@/lib/auth/jwt';
+import { tokenCounter } from '@/lib/server/token-counter';
+import { TTS_TOKENS_PER_CHAR } from '@/lib/server/feature-metering';
 
 const log = createLogger('TTS API');
 
@@ -58,10 +64,18 @@ export async function POST(req: NextRequest) {
 
     const apiKey = clientBaseUrl
       ? ttsApiKey || ''
-      : resolveTTSApiKey(ttsProviderId, ttsApiKey || undefined);
+      : await resolveTTSApiKeyAsync(ttsProviderId, ttsApiKey || undefined);
     const baseUrl = clientBaseUrl
       ? clientBaseUrl
-      : resolveTTSBaseUrl(ttsProviderId, ttsBaseUrl || undefined);
+      : await resolveTTSBaseUrlAsync(ttsProviderId, ttsBaseUrl || undefined);
+
+    if (!apiKey && !clientBaseUrl) {
+      return apiError(
+        'FEATURE_NOT_CONFIGURED',
+        400,
+        'Text-to-Speech is not activated by your school yet.',
+      );
+    }
 
     // Build TTS config
     const config = {
@@ -82,6 +96,20 @@ export async function POST(req: NextRequest) {
 
     // Convert to base64
     const base64 = Buffer.from(audio).toString('base64');
+
+    // Record token-equivalent usage (per-char, see lib/server/feature-metering).
+    const accessToken = req.cookies.get('access_token')?.value;
+    const user = accessToken ? extractUser(accessToken) : null;
+    if (user?.student_uuid) {
+      tokenCounter.recordUsage(
+        user.student_uuid,
+        ttsProviderId,
+        ttsModelId || '',
+        text.length * TTS_TOKENS_PER_CHAR,
+        0,
+      );
+      tokenCounter.flushUsage(user.student_uuid).catch(() => {});
+    }
 
     return apiSuccess({ audioId, base64, format });
   } catch (error) {

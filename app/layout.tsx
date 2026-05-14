@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import type { CSSProperties } from 'react';
 import './globals.css';
 import 'animate.css';
 import 'katex/dist/katex.min.css';
@@ -12,6 +13,7 @@ import { ServerProvidersInit } from '@/components/server-providers-init';
 import { AuthProvider } from '@/lib/contexts/auth-context';
 import { BrandingProvider } from '@/lib/contexts/branding-context';
 import { ApiErrorBoundary } from '@/components/api-error-boundary';
+import { getServerBranding } from '@/lib/api/server-branding';
 
 const inter = localFont({
   src: '../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
@@ -19,19 +21,40 @@ const inter = localFont({
   weight: '100 900',
 });
 
-export const metadata: Metadata = {
-  title: 'OpenMAIC',
-  description:
-    'The open-source AI interactive classroom. Upload a PDF to instantly generate an immersive, multi-agent learning experience.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getServerBranding();
+  return {
+    title: branding?.school_name ?? 'DV-CLASS',
+    description:
+      'The open-source AI interactive classroom. Upload a PDF to instantly generate an immersive, multi-agent learning experience.',
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const branding = await getServerBranding();
+
+  const brandingStyle: CSSProperties = {};
+  if (branding?.primary_color) {
+    (brandingStyle as Record<string, string>)['--primary'] = branding.primary_color;
+  }
+  if (branding?.secondary_color) {
+    (brandingStyle as Record<string, string>)['--secondary'] = branding.secondary_color;
+  }
+  if (branding?.accent_color) {
+    (brandingStyle as Record<string, string>)['--accent'] = branding.accent_color;
+  }
+
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={inter.variable}
+      style={brandingStyle}
+      suppressHydrationWarning
+    >
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
         suppressHydrationWarning
@@ -39,7 +62,7 @@ export default function RootLayout({
         <ThemeProvider>
           <I18nProvider>
             <AuthProvider>
-              <BrandingProvider>
+              <BrandingProvider initialBranding={branding}>
                 <ApiErrorBoundary>
                   <ServerProvidersInit />
                   {children}

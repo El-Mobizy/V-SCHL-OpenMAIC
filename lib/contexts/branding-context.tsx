@@ -14,28 +14,40 @@ const BrandingContext = createContext<BrandingContextValue>({
   isLoaded: false,
 });
 
-export function BrandingProvider({ children }: { children: ReactNode }) {
-  const [branding, setBranding] = useState<SchoolBranding | null>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
+function applyBrandingSideEffects(data: SchoolBranding) {
+  const root = document.documentElement;
+  if (data.primary_color) root.style.setProperty('--primary', data.primary_color);
+  if (data.secondary_color) root.style.setProperty('--secondary', data.secondary_color);
+  if (data.accent_color) root.style.setProperty('--accent', data.accent_color);
+  if (data.school_name) document.title = data.school_name;
+}
+
+export function BrandingProvider({
+  children,
+  initialBranding = null,
+}: {
+  children: ReactNode;
+  initialBranding?: SchoolBranding | null;
+}) {
+  const [branding, setBranding] = useState<SchoolBranding | null>(initialBranding);
+  const [isLoaded, setIsLoaded] = useState(initialBranding !== null);
 
   useEffect(() => {
+    // Server already resolved branding and the root layout inlined the CSS
+    // variables and <title>. No client refetch needed.
+    if (initialBranding) return;
+
     api.school
       .branding()
       .then((data) => {
         setBranding(data);
-        // Apply CSS variable overrides
-        const root = document.documentElement;
-        if (data.primary_color) root.style.setProperty('--primary', data.primary_color);
-        if (data.secondary_color) root.style.setProperty('--secondary', data.secondary_color);
-        if (data.accent_color) root.style.setProperty('--accent', data.accent_color);
-        // Update page title
-        if (data.school_name) document.title = data.school_name;
+        applyBrandingSideEffects(data);
       })
       .catch(() => {
         // Fallback to default branding
       })
       .finally(() => setIsLoaded(true));
-  }, []);
+  }, [initialBranding]);
 
   return (
     <BrandingContext.Provider value={{ branding, isLoaded }}>{children}</BrandingContext.Provider>

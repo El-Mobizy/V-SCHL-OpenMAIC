@@ -70,7 +70,8 @@ export default function DashboardPage() {
                 progressMap[c.uuid] = p;
               })
               .catch((e) => {
-                if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
+                if (e instanceof ApiError && e.code === 'NOT_FOUND') return;
+                console.warn('[dashboard] progress fetch failed for', c.uuid, e);
               }),
             api.courses.syllabus
               .get(c.uuid, user.student_uuid)
@@ -78,7 +79,8 @@ export default function DashboardPage() {
                 ready.add(c.uuid);
               })
               .catch((e) => {
-                if (!(e instanceof ApiError) || e.code !== 'NOT_FOUND') throw e;
+                if (e instanceof ApiError && e.code === 'NOT_FOUND') return;
+                console.warn('[dashboard] syllabus probe failed for', c.uuid, e);
               }),
           ]),
         );
@@ -151,10 +153,10 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {courses.map((course) => {
             const p = progress[course.uuid];
-            const progressPercent = p
+            const hasStarted = !!p && p.total_scenes > 0;
+            const progressPercent = hasStarted
               ? Math.round((p.completed_scenes.length / p.total_scenes) * 100)
               : 0;
-            const hasStarted = !!p;
             const isComplete = hasStarted && progressPercent >= 100;
             const isReady = !hasStarted && readyCourses.has(course.uuid);
             const initials = courseInitials(course.title);
@@ -285,10 +287,10 @@ export default function DashboardPage() {
         >
           {courses.map((course) => {
             const p = progress[course.uuid];
-            const progressPercent = p
+            const hasStarted = !!p && p.total_scenes > 0;
+            const progressPercent = hasStarted
               ? Math.round((p.completed_scenes.length / p.total_scenes) * 100)
               : 0;
-            const hasStarted = !!p;
             const isReady = !hasStarted && readyCourses.has(course.uuid);
 
             return (
