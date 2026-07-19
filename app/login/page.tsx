@@ -1,13 +1,22 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useBranding } from '@/lib/hooks/use-branding';
 
+// useSearchParams() requires a Suspense boundary for static prerender
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isLoading, error, clearError } = useAuthStore();
@@ -31,14 +40,15 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-sm space-y-6 p-8">
-        {/* Logo area — will be replaced by branding context in Phase 6 */}
+      <div className="w-full max-w-sm p-8 bg-card border border-border rounded-xl">
+        {/* Logo area */}
         <div className="text-center space-y-2">
+          <span className="label-mono">V-CLASS</span>
           <img src={logoUrl} alt={schoolName} className="mx-auto h-12" />
           <p className="text-sm text-muted-foreground">Sign in to {schoolName}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
           )}
@@ -56,6 +66,7 @@ export default function LoginPage() {
             }}
             required
             autoFocus
+            className="bg-transparent"
           />
 
           <Input
@@ -67,6 +78,7 @@ export default function LoginPage() {
               setPassword(e.target.value);
             }}
             required
+            className="bg-transparent"
           />
 
           <Button type="submit" className="w-full" disabled={isLoading}>

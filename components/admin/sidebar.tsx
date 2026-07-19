@@ -8,7 +8,7 @@ export function Sidebar() {
       <SidebarNavItem href="/admin" label="Dashboard" icon={LayoutDashboard} exact />
       <SidebarNavItem href="/admin/courses" label="Courses" icon={BookOpen} />
       <SidebarNavItem href="/admin/students" label="Students" icon={Users} />
-      <div className="my-2 border-t" />
+      <div className="my-2 border-t border-sidebar-border" />
       <SidebarNavItem href="/admin/settings" label="Settings" icon={Settings} />
       <SidebarNavItem href="/admin/settings/ai-config" label="AI Configuration" icon={Cpu} />
     </nav>

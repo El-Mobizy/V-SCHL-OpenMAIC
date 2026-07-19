@@ -57,7 +57,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const sidebarContent = (
     <>
-      <div className="flex items-center gap-2 px-4 py-3 border-b">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-sidebar-border">
         <img src={logoUrl} alt={schoolName} className="h-8 shrink-0" />
         <div className="flex-1 min-w-0 flex flex-col">
           <span
@@ -83,7 +83,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1 overflow-y-auto">
         <Sidebar />
       </div>
-      <div className="border-t p-3 flex items-center justify-between gap-2">
+      <div className="border-t border-sidebar-border p-3 flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground truncate">{user?.name}</span>
         <div className="flex items-center gap-1">
           <Button
@@ -125,7 +125,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-60 shrink-0 border-r bg-card flex-col border-t-2 border-t-primary">
+      <aside className="hidden md:flex w-60 shrink-0 border-r bg-sidebar text-sidebar-foreground flex-col border-t-2 border-t-primary border-sidebar-border">
         {sidebarContent}
       </aside>
 
@@ -146,7 +146,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           aria-modal="true"
           aria-label="Navigation"
           className={cn(
-            'absolute inset-y-0 left-0 w-64 max-w-[80vw] bg-card border-r flex flex-col shadow-xl transition-transform duration-200 border-t-2 border-t-primary',
+            'absolute inset-y-0 left-0 w-64 max-w-[80vw] bg-sidebar text-sidebar-foreground border-r flex flex-col shadow-xl transition-transform duration-200 border-t-2 border-t-primary border-sidebar-border',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
