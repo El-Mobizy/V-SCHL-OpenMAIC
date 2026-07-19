@@ -8,7 +8,7 @@ export function useBranding() {
   return {
     logoUrl: resolveBrandingAssetUrl(branding?.logo_url) || '/logo-horizontal.png',
     schoolName: branding?.school_name ?? 'DV-CLASS',
-    primaryColor: branding?.primary_color ?? '#722ed1',
+    primaryColor: branding?.primary_color ?? '#00B2C2',
     secondaryColor: branding?.secondary_color,
     accentColor: branding?.accent_color,
     isLoaded,
