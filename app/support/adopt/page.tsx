@@ -1,10 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
+// useSearchParams() requires a Suspense boundary for static prerender
 export default function AdoptSupportPage() {
+  return (
+    <Suspense>
+      <AdoptSupportForm />
+    </Suspense>
+  );
+}
+
+function AdoptSupportForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
