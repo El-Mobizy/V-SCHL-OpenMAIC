@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
-import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
 import type { CSSProperties } from 'react';
 import './globals.css';
 import 'animate.css';
@@ -19,6 +17,18 @@ const inter = localFont({
   src: '../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2',
   variable: '--font-sans',
   weight: '100 900',
+});
+
+const plusJakarta = localFont({
+  src: '../node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2',
+  variable: '--font-display',
+  weight: '200 800',
+});
+
+const jetbrainsMono = localFont({
+  src: '../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2',
+  variable: '--font-jetbrains-mono',
+  weight: '100 800',
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -51,14 +61,11 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={inter.variable}
+      className={`${inter.variable} ${plusJakarta.variable} ${jetbrainsMono.variable}`}
       style={brandingStyle}
       suppressHydrationWarning
     >
-      <body
-        className={`${GeistSans.variable} ${GeistMono.variable} antialiased`}
-        suppressHydrationWarning
-      >
+      <body className="antialiased" suppressHydrationWarning>
         <ThemeProvider>
           <I18nProvider>
             <AuthProvider>
