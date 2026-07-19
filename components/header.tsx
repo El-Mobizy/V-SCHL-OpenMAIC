@@ -99,7 +99,7 @@ export function Header({ currentSceneTitle }: HeaderProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-4 bg-card/80 backdrop-blur-md px-2 py-1.5 rounded-full border border-border shadow-sm shrink-0">
+        <div className="flex items-center gap-4 bg-card/80 backdrop-blur-md px-2 py-1.5 rounded-full border border-border shrink-0">
           <ModelOverridePicker />
           <div className="w-[1px] h-4 bg-border" />
           {/* Language Selector */}
@@ -154,7 +154,7 @@ export function Header({ currentSceneTitle }: HeaderProps) {
                 setThemeOpen(!themeOpen);
                 setLanguageOpen(false);
               }}
-              className="p-2 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow-sm transition-all group"
+              className="p-2 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-all group"
             >
               {theme === 'light' && <Sun className="w-4 h-4" />}
               {theme === 'dark' && <Moon className="w-4 h-4" />}
@@ -214,7 +214,7 @@ export function Header({ currentSceneTitle }: HeaderProps) {
           <div className="relative">
             <button
               onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow-sm transition-all group"
+              className="p-2 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-all group"
             >
               <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
             </button>
@@ -238,7 +238,7 @@ export function Header({ currentSceneTitle }: HeaderProps) {
             className={cn(
               'shrink-0 p-2 rounded-full transition-all',
               canExport && !isExporting
-                ? 'text-muted-foreground hover:bg-accent hover:text-foreground hover:shadow-sm'
+                ? 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 : 'text-muted-foreground/50 cursor-not-allowed opacity-50',
             )}
           >

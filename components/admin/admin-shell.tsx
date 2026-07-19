@@ -146,7 +146,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           aria-modal="true"
           aria-label="Navigation"
           className={cn(
-            'absolute inset-y-0 left-0 w-64 max-w-[80vw] bg-sidebar text-sidebar-foreground border-r flex flex-col shadow-xl transition-transform duration-200 border-t-2 border-t-primary border-sidebar-border',
+            'absolute inset-y-0 left-0 w-64 max-w-[80vw] bg-sidebar text-sidebar-foreground border-r flex flex-col shadow-xl transition-transform duration-200 border-sidebar-border',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >

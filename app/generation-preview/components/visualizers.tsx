@@ -355,7 +355,7 @@ function ContentVisualizer() {
         };
       case 1:
         return {
-          color: 'purple',
+          color: 'cyan',
           label: 'QUIZ',
           badge:
             'bg-cyan-100 text-cyan-600 border-cyan-200 dark:bg-cyan-900/40 dark:text-cyan-300 dark:border-cyan-800',
@@ -389,7 +389,7 @@ function ContentVisualizer() {
         className={cn(
           'absolute inset-0 blur-3xl rounded-full transition-colors duration-1000',
           theme.color === 'blue' && 'bg-blue-500/10',
-          theme.color === 'purple' && 'bg-cyan-500/10',
+          theme.color === 'cyan' && 'bg-cyan-500/10',
           theme.color === 'amber' && 'bg-amber-500/10',
           theme.color === 'emerald' && 'bg-emerald-500/10',
         )}
@@ -404,7 +404,7 @@ function ContentVisualizer() {
           className={cn(
             'absolute border rounded-full transition-colors duration-1000',
             theme.color === 'blue' && 'border-blue-500/10',
-            theme.color === 'purple' && 'border-cyan-500/10',
+            theme.color === 'cyan' && 'border-cyan-500/10',
             theme.color === 'amber' && 'border-amber-500/10',
             theme.color === 'emerald' && 'border-emerald-500/10',
           )}
@@ -436,7 +436,7 @@ function ContentVisualizer() {
             className={cn(
               'absolute inset-0 bg-white dark:bg-slate-800 rounded-xl border shadow-xl overflow-hidden flex flex-col p-3 origin-center',
               theme.color === 'blue' && 'border-blue-200 dark:border-blue-900/30',
-              theme.color === 'purple' && 'border-cyan-200 dark:border-cyan-900/30',
+              theme.color === 'cyan' && 'border-cyan-200 dark:border-cyan-900/30',
               theme.color === 'amber' && 'border-amber-200 dark:border-amber-900/30',
               theme.color === 'emerald' && 'border-emerald-200 dark:border-emerald-900/30',
             )}
