@@ -486,8 +486,8 @@ function HomePage() {
       >
         {/* ── Logo ── */}
         <motion.img
-          src="/logo-horizontal.png"
-          alt="DV-CLASS"
+          src="/logo.svg"
+          alt="V-CLASS"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{
@@ -496,7 +496,7 @@ function HomePage() {
             stiffness: 200,
             damping: 20,
           }}
-          className="h-12 md:h-16 mb-2 -ml-2 md:-ml-3"
+          className="h-12 md:h-16 mb-2"
         />
 
         {/* ── Slogan ── */}

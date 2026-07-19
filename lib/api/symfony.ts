@@ -43,7 +43,7 @@ export async function bffUpload<T>(path: string, file: File): Promise<T> {
 
 // Branding assets (logo, favicon) are served by Symfony's public/uploads/, not Next.
 // Prepend the Symfony origin when the path is backend-hosted; pass through Next-local
-// assets (e.g. /logo-horizontal.png) and already-absolute URLs untouched.
+// assets (e.g. /logo.svg) and already-absolute URLs untouched.
 export function resolveBrandingAssetUrl(path: string | null | undefined): string {
   if (!path) return '';
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
