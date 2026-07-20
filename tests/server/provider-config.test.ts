@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { loadProviderConfig, __clearProviderConfigCache } from '@/lib/server/provider-config';
 
 // Mock fs — only intercept server-providers.yml; delegate everything else to real fs.
 // This prevents YAML config from leaking host-machine state into tests while keeping
@@ -201,5 +202,72 @@ pdf:
 
       expect(providers.mineru).toBeUndefined();
     });
+  });
+});
+
+const fetchMock = vi.fn();
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', fetchMock);
+  vi.stubEnv('SYMFONY_API_URL', 'http://symfony');
+  vi.stubEnv('SYMFONY_SERVICE_TOKEN', 'svc');
+  __clearProviderConfigCache();
+  fetchMock.mockReset();
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe('loadProviderConfig', () => {
+  it('returns DB config when Symfony has a key', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { provider: 'openai', api_key: 'sk-db', base_url: 'b', models: ['m'], has_key: true },
+        ]),
+        { status: 200 },
+      ),
+    );
+    const cfg = await loadProviderConfig('openai');
+    expect(cfg.apiKey).toBe('sk-db');
+    expect(cfg.baseUrl).toBe('b');
+    expect(cfg.models).toEqual(['m']);
+  });
+
+  it('falls back to env when Symfony has no key', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    vi.stubEnv('OPENAI_API_KEY', 'sk-env');
+    vi.stubEnv('OPENAI_BASE_URL', 'http://env');
+    const cfg = await loadProviderConfig('openai');
+    expect(cfg.apiKey).toBe('sk-env');
+    expect(cfg.baseUrl).toBe('http://env');
+  });
+
+  it('throws NOT_CONFIGURED when neither source has a key', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    vi.stubEnv('OPENAI_API_KEY', '');
+    await expect(loadProviderConfig('openai')).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });
+  });
+
+  it('is single-flight: 10 concurrent callers share one Symfony fetch', async () => {
+    let resolveFetch!: (res: Response) => void;
+    fetchMock.mockReturnValueOnce(
+      new Promise<Response>((r) => {
+        resolveFetch = r;
+      }),
+    );
+    vi.stubEnv('OPENAI_API_KEY', ''); // force DB-only resolution
+
+    const calls = Promise.all(Array.from({ length: 10 }, () => loadProviderConfig('openai')));
+    resolveFetch(
+      new Response(
+        JSON.stringify([
+          { provider: 'openai', api_key: 'sk-db', base_url: 'b', models: ['m'], has_key: true },
+        ]),
+        { status: 200 },
+      ),
+    );
+    const results = await calls;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    for (const r of results) expect(r.apiKey).toBe('sk-db');
   });
 });

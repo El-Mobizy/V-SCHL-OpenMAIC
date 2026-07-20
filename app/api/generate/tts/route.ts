@@ -9,35 +9,36 @@
 
 import { NextRequest } from 'next/server';
 import { generateTTS } from '@/lib/audio/tts-providers';
-import { resolveTTSApiKey, resolveTTSBaseUrl } from '@/lib/server/provider-config';
+import {
+  resolveTTSApiKeyAsync,
+  resolveTTSBaseUrlAsync,
+} from '@/lib/server/provider-config';
 import type { TTSProviderId } from '@/lib/audio/types';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { validateUrlForSSRF } from '@/lib/server/ssrf-guard';
+import { extractUser } from '@/lib/auth/jwt';
+import { tokenCounter } from '@/lib/server/token-counter';
+import { TTS_TOKENS_PER_CHAR } from '@/lib/server/feature-metering';
 
 const log = createLogger('TTS API');
 
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
-  let ttsProviderId: string | undefined;
-  let ttsVoice: string | undefined;
-  let audioId: string | undefined;
   try {
     const body = await req.json();
-    const { text, ttsModelId, ttsSpeed, ttsApiKey, ttsBaseUrl } = body as {
-      text: string;
-      audioId: string;
-      ttsProviderId: TTSProviderId;
-      ttsModelId?: string;
-      ttsVoice: string;
-      ttsSpeed?: number;
-      ttsApiKey?: string;
-      ttsBaseUrl?: string;
-    };
-    ttsProviderId = body.ttsProviderId;
-    ttsVoice = body.ttsVoice;
-    audioId = body.audioId;
+    const { text, audioId, ttsProviderId, ttsModelId, ttsVoice, ttsSpeed, ttsApiKey, ttsBaseUrl } =
+      body as {
+        text: string;
+        audioId: string;
+        ttsProviderId: TTSProviderId;
+        ttsModelId?: string;
+        ttsVoice: string;
+        ttsSpeed?: number;
+        ttsApiKey?: string;
+        ttsBaseUrl?: string;
+      };
 
     // Validate required fields
     if (!text || !audioId || !ttsProviderId || !ttsVoice) {
@@ -63,14 +64,22 @@ export async function POST(req: NextRequest) {
 
     const apiKey = clientBaseUrl
       ? ttsApiKey || ''
-      : resolveTTSApiKey(ttsProviderId, ttsApiKey || undefined);
+      : await resolveTTSApiKeyAsync(ttsProviderId, ttsApiKey || undefined);
     const baseUrl = clientBaseUrl
       ? clientBaseUrl
-      : resolveTTSBaseUrl(ttsProviderId, ttsBaseUrl || undefined);
+      : await resolveTTSBaseUrlAsync(ttsProviderId, ttsBaseUrl || undefined);
+
+    if (!apiKey && !clientBaseUrl) {
+      return apiError(
+        'FEATURE_NOT_CONFIGURED',
+        400,
+        'Text-to-Speech is not activated by your school yet.',
+      );
+    }
 
     // Build TTS config
     const config = {
-      providerId: ttsProviderId as TTSProviderId,
+      providerId: ttsProviderId,
       modelId: ttsModelId,
       voice: ttsVoice,
       speed: ttsSpeed ?? 1.0,
@@ -88,12 +97,23 @@ export async function POST(req: NextRequest) {
     // Convert to base64
     const base64 = Buffer.from(audio).toString('base64');
 
+    // Record token-equivalent usage (per-char, see lib/server/feature-metering).
+    const accessToken = req.cookies.get('access_token')?.value;
+    const user = accessToken ? extractUser(accessToken) : null;
+    if (user?.student_uuid) {
+      tokenCounter.recordUsage(
+        user.student_uuid,
+        ttsProviderId,
+        ttsModelId || '',
+        text.length * TTS_TOKENS_PER_CHAR,
+        0,
+      );
+      tokenCounter.flushUsage(user.student_uuid).catch(() => {});
+    }
+
     return apiSuccess({ audioId, base64, format });
   } catch (error) {
-    log.error(
-      `TTS generation failed [provider=${ttsProviderId ?? 'unknown'}, voice=${ttsVoice ?? 'unknown'}, audioId=${audioId ?? 'unknown'}]:`,
-      error,
-    );
+    log.error('TTS generation error:', error);
     return apiError(
       'GENERATION_FAILED',
       500,

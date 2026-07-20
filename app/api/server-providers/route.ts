@@ -1,10 +1,10 @@
 import {
   getServerProviders,
-  getServerTTSProviders,
-  getServerASRProviders,
+  getServerTTSProvidersAsync,
+  getServerASRProvidersAsync,
   getServerPDFProviders,
-  getServerImageProviders,
-  getServerVideoProviders,
+  getServerImageProvidersAsync,
+  getServerVideoProvidersAsync,
   getServerWebSearchProviders,
 } from '@/lib/server/provider-config';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
@@ -14,13 +14,19 @@ const log = createLogger('ServerProviders');
 
 export async function GET() {
   try {
+    const [tts, asr, image, video] = await Promise.all([
+      getServerTTSProvidersAsync(),
+      getServerASRProvidersAsync(),
+      getServerImageProvidersAsync(),
+      getServerVideoProvidersAsync(),
+    ]);
     return apiSuccess({
       providers: getServerProviders(),
-      tts: getServerTTSProviders(),
-      asr: getServerASRProviders(),
+      tts,
+      asr,
       pdf: getServerPDFProviders(),
-      image: getServerImageProviders(),
-      video: getServerVideoProviders(),
+      image,
+      video,
       webSearch: getServerWebSearchProviders(),
     });
   } catch (error) {

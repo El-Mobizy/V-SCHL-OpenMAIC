@@ -23,6 +23,7 @@ import type { LangGraphRunnableConfig } from '@langchain/langgraph';
 import type { LanguageModel } from 'ai';
 
 import { AISdkLangGraphAdapter } from './ai-sdk-adapter';
+import type { LLMMetering } from '@/lib/ai/llm';
 import type { StatelessEvent } from '@/lib/types/chat';
 import type { StatelessChatRequest } from '@/lib/types/chat';
 import type { ThinkingConfig } from '@/lib/types/provider';
@@ -54,6 +55,7 @@ const OrchestratorState = Annotation.Root({
   maxTurns: Annotation<number>,
   languageModel: Annotation<LanguageModel>,
   thinkingConfig: Annotation<ThinkingConfig | null>,
+  metering: Annotation<LLMMetering | null>,
   discussionContext: Annotation<{ topic: string; prompt?: string } | null>,
   triggerAgentId: Annotation<string | null>,
   userProfile: Annotation<{ nickname?: string; bio?: string } | null>,
@@ -178,7 +180,11 @@ async function directorNode(
     state.storeState.whiteboardOpen,
   );
 
-  const adapter = new AISdkLangGraphAdapter(state.languageModel, state.thinkingConfig ?? undefined);
+  const adapter = new AISdkLangGraphAdapter(
+    state.languageModel,
+    state.thinkingConfig ?? undefined,
+    state.metering ?? undefined,
+  );
 
   try {
     const result = await adapter._generate(
@@ -290,7 +296,11 @@ async function runAgentGeneration(
     state.agentResponses,
   );
   const openaiMessages = convertMessagesToOpenAI(state.messages, agentId);
-  const adapter = new AISdkLangGraphAdapter(state.languageModel, state.thinkingConfig ?? undefined);
+  const adapter = new AISdkLangGraphAdapter(
+    state.languageModel,
+    state.thinkingConfig ?? undefined,
+    state.metering ?? undefined,
+  );
 
   const lcMessages = [
     new SystemMessage(systemPrompt),
@@ -503,6 +513,7 @@ export function buildInitialState(
   request: StatelessChatRequest,
   languageModel: LanguageModel,
   thinkingConfig?: ThinkingConfig,
+  metering?: LLMMetering,
 ): typeof OrchestratorState.State {
   // Build request-scoped agent config overrides for generated agents.
   // These travel with each request — no server-side persistence needed.
@@ -535,6 +546,7 @@ export function buildInitialState(
     maxTurns: turnCount + 1, // Allow exactly one more director→agent cycle
     languageModel,
     thinkingConfig: thinkingConfig ?? null,
+    metering: metering ?? null,
     discussionContext,
     triggerAgentId: request.config.triggerAgentId || null,
     userProfile: request.userProfile || null,

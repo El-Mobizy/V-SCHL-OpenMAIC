@@ -8,8 +8,11 @@
 import { NextRequest } from 'next/server';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 const log = createLogger('Quiz Grade');
 
 interface GradeRequest {
@@ -26,20 +29,25 @@ interface GradeResponse {
 }
 
 export async function POST(req: NextRequest) {
-  let questionSnippet: string | undefined;
-  let resolvedPoints: number | undefined;
+  let studentAuth: { studentId: string; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
+    throw e;
+  }
+
   try {
     const body = (await req.json()) as GradeRequest;
     const { question, userAnswer, points, commentPrompt, language } = body;
-    questionSnippet = question?.substring(0, 60);
-    resolvedPoints = points;
 
     if (!question || !userAnswer) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'question and userAnswer are required');
     }
 
     // Resolve model from request headers
-    const { model: languageModel } = resolveModelFromHeaders(req);
+    const { model: languageModel, modelString } = resolveModelFromHeaders(req);
+    const { providerId } = parseModelString(modelString);
 
     const isZh = language === 'zh-CN';
 
@@ -66,6 +74,13 @@ ${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${
         prompt: userPrompt,
       },
       'quiz-grade',
+      undefined,
+      undefined,
+      {
+        studentId: studentAuth.studentId,
+        providerId,
+        accessToken: studentAuth.accessToken,
+      },
     );
 
     // Parse the LLM response as JSON
@@ -93,10 +108,8 @@ ${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${
 
     return apiSuccess({ ...gradeResult });
   } catch (error) {
-    log.error(
-      `Quiz grading failed [question="${questionSnippet ?? 'unknown'}...", points=${resolvedPoints ?? 'unknown'}]:`,
-      error,
-    );
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
+    log.error('Error:', error);
     return apiError('INTERNAL_ERROR', 500, 'Failed to grade answer');
   }
 }

@@ -30,9 +30,12 @@ import type {
   SceneOutline,
   ImageMapping,
 } from '@/lib/types/generation';
-import { apiError } from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 const log = createLogger('Outlines Stream');
 
 export const maxDuration = 300;
@@ -97,14 +100,20 @@ function extractNewOutlines(buffer: string, alreadyParsed: number): SceneOutline
 }
 
 export async function POST(req: NextRequest) {
-  let requirementSnippet: string | undefined;
-  let resolvedModelString: string | undefined;
+  let studentAuth: { studentId: string; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
+    throw e;
+  }
+
   try {
     const body = await req.json();
 
     // Get API configuration from request headers
     const { model: languageModel, modelInfo, modelString } = resolveModelFromHeaders(req);
-    resolvedModelString = modelString;
+    const { providerId } = parseModelString(modelString);
 
     if (!body.requirements) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Requirements are required');
@@ -118,7 +127,6 @@ export async function POST(req: NextRequest) {
       researchContext?: string;
       agents?: AgentInfo[];
     };
-    requirementSnippet = requirements?.requirement?.substring(0, 60);
 
     // Detect vision capability
     const hasVision = !!modelInfo?.capabilities?.vision;
@@ -251,7 +259,11 @@ export async function POST(req: NextRequest) {
 
           for (let attempt = 1; attempt <= MAX_STREAM_RETRIES + 1; attempt++) {
             try {
-              const result = streamLLM(streamParams, 'scene-outlines-stream');
+              const result = await streamLLM(streamParams, 'scene-outlines-stream', undefined, {
+                studentId: studentAuth.studentId,
+                providerId,
+                accessToken: studentAuth.accessToken,
+              });
 
               let fullText = '';
               parsedOutlines = [];
@@ -300,6 +312,14 @@ export async function POST(req: NextRequest) {
                 controller.enqueue(encoder.encode(`data: ${retryEvent}\n\n`));
               }
             } catch (error) {
+              // Rate-limit: don't retry — the quota won't refill within the
+              // retry window, so re-attempting just pollutes logs and delays
+              // the surfaced failure. Bubble out to the outer catch, which
+              // emits the `error` SSE event for the client.
+              if (error instanceof ApiError && error.code === 'RATE_LIMITED') {
+                throw error;
+              }
+
               lastError = error instanceof Error ? error.message : String(error);
 
               if (attempt <= MAX_STREAM_RETRIES) {
@@ -359,10 +379,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    log.error(
-      `Outline streaming failed [requirement="${requirementSnippet ?? 'unknown'}...", model=${resolvedModelString ?? 'unknown'}]:`,
-      error,
-    );
+    log.error('Streaming error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }
 }

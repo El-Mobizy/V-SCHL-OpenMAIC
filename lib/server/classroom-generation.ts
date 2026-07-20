@@ -1,5 +1,7 @@
 import { nanoid } from 'nanoid';
-import { callLLM } from '@/lib/ai/llm';
+import { ulid } from 'ulid';
+import { callLLM, type LLMMetering } from '@/lib/ai/llm';
+import { tokenCounter } from '@/lib/server/token-counter';
 import { createStageAPI } from '@/lib/api/stage-api';
 import type { StageStore } from '@/lib/api/stage-api-types';
 import {
@@ -40,6 +42,11 @@ export interface GenerateClassroomInput {
   enableVideoGeneration?: boolean;
   enableTTS?: boolean;
   agentMode?: 'default' | 'generate';
+  modelString?: string;
+  /** Crockford base32 ULID of the course this classroom belongs to, if any. */
+  courseUuid?: string;
+  /** Admin-curated topics from /api/courses/{uuid}/syllabus-topics. Empty/absent = freeform. */
+  syllabusTopics?: Array<{ title: string; description: string }>;
 }
 
 export type ClassroomGenerationStep =
@@ -67,6 +74,11 @@ export interface GenerateClassroomResult {
   scenes: Scene[];
   scenesCount: number;
   createdAt: string;
+  /**
+   * Features the student requested but couldn't be produced because the school
+   * admin hasn't configured a provider. UI surfaces these as friendly toasts.
+   */
+  notConfigured?: Array<'tts' | 'image' | 'video'>;
 }
 
 function createInMemoryStore(stage: Stage): StageStore {
@@ -164,6 +176,7 @@ export async function generateClassroom(
   options: {
     baseUrl: string;
     onProgress?: (progress: ClassroomGenerationProgress) => Promise<void> | void;
+    metering?: LLMMetering;
   },
 ): Promise<GenerateClassroomResult> {
   const { requirement, pdfContent } = input;
@@ -175,8 +188,10 @@ export async function generateClassroom(
     scenesGenerated: 0,
   });
 
-  const { model: languageModel, modelInfo, modelString } = resolveModel({});
-  log.info(`Using server-configured model: ${modelString}`);
+  const { model: languageModel, modelInfo, modelString } = resolveModel({
+    modelString: input.modelString,
+  });
+  log.info(`Using resolved model: ${modelString}`);
 
   // Fail fast if the resolved provider has no API key configured
   const { providerId } = parseModelString(modelString);
@@ -199,13 +214,25 @@ export async function generateClassroom(
         maxOutputTokens: modelInfo?.outputWindow,
       },
       'generate-classroom',
+      undefined,
+      undefined,
+      options.metering,
     );
     return result.text;
   };
 
   const lang = normalizeLanguage(input.language);
+  const curriculumBlock =
+    input.syllabusTopics && input.syllabusTopics.length > 0
+      ? [
+          'Curriculum topics (admin-curated, ordered). Produce scenes covering these in order, expanding on each:',
+          ...input.syllabusTopics.map((t, i) => `${i + 1}. ${t.title} — ${t.description}`),
+        ].join('\n')
+      : '';
   const requirements: UserRequirements = {
-    requirement,
+    requirement: curriculumBlock
+      ? `${curriculumBlock}\n\nStudent-provided requirement:\n${requirement}`
+      : requirement,
     language: lang,
   };
   const pdfText = pdfContent?.text || undefined;
@@ -291,7 +318,10 @@ export async function generateClassroom(
     totalScenes: outlines.length,
   });
 
-  const stageId = nanoid(10);
+  // Symfony /api/classrooms requires a 26-char Crockford base32 ULID (§3.8),
+  // not a nanoid. Legacy stage ids in IndexedDB stay as-is — we only mint
+  // ULIDs for new classrooms so backend persistence accepts them.
+  const stageId = ulid();
   const stage: Stage = {
     id: stageId,
     name: outlines[0]?.title || requirement.slice(0, 50),
@@ -362,6 +392,8 @@ export async function generateClassroom(
     throw new Error('No scenes were generated');
   }
 
+  const notConfigured: Array<'tts' | 'image' | 'video'> = [];
+
   // Phase: Media generation (after all scenes generated)
   if (input.enableImageGeneration || input.enableVideoGeneration) {
     await options.onProgress?.({
@@ -373,9 +405,28 @@ export async function generateClassroom(
     });
 
     try {
-      const mediaMap = await generateMediaForClassroom(outlines, stageId, options.baseUrl);
-      replaceMediaPlaceholders(scenes, mediaMap);
-      log.info(`Media generation complete: ${Object.keys(mediaMap).length} files`);
+      const mediaReport = await generateMediaForClassroom(outlines, stageId, options.baseUrl, {
+        studentId: options.metering?.studentId,
+      });
+      replaceMediaPlaceholders(scenes, mediaReport.mediaMap);
+      for (const f of mediaReport.notConfigured) {
+        if (f === 'image' && input.enableImageGeneration) notConfigured.push('image');
+        if (f === 'video' && input.enableVideoGeneration) notConfigured.push('video');
+      }
+      if (mediaReport.notConfigured.length > 0) {
+        await options.onProgress?.({
+          step: 'generating_media',
+          progress: 93,
+          message: `Heads up — ${mediaReport.notConfigured
+            .map((f) => (f === 'image' ? 'Image Generation' : 'Video Generation'))
+            .join(' and ')} not activated by your school yet.`,
+          scenesGenerated: scenes.length,
+          totalScenes: outlines.length,
+        });
+      }
+      log.info(
+        `Media generation complete: ${mediaReport.generated.images} images, ${mediaReport.generated.videos} videos`,
+      );
     } catch (err) {
       log.warn('Media generation phase failed, continuing:', err);
     }
@@ -392,8 +443,22 @@ export async function generateClassroom(
     });
 
     try {
-      await generateTTSForClassroom(scenes, stageId, options.baseUrl);
-      log.info('TTS generation complete');
+      const ttsReport = await generateTTSForClassroom(scenes, stageId, options.baseUrl, {
+        studentId: options.metering?.studentId,
+      });
+      if (ttsReport.notConfigured) {
+        notConfigured.push('tts');
+        await options.onProgress?.({
+          step: 'generating_tts',
+          progress: 96,
+          message: 'Heads up — Teacher voice (Text-to-Speech) not activated by your school yet.',
+          scenesGenerated: scenes.length,
+          totalScenes: outlines.length,
+        });
+      }
+      log.info(
+        `TTS generation complete: ${ttsReport.actionsSynthesized} actions, ${ttsReport.charactersSynthesized} chars`,
+      );
     } catch (err) {
       log.warn('TTS generation phase failed, continuing:', err);
     }
@@ -407,6 +472,10 @@ export async function generateClassroom(
     totalScenes: outlines.length,
   });
 
+  if (!options.metering?.accessToken) {
+    throw new Error('Classroom persistence requires an authenticated student access token');
+  }
+
   const persisted = await persistClassroom(
     {
       id: stageId,
@@ -414,9 +483,22 @@ export async function generateClassroom(
       scenes,
     },
     options.baseUrl,
+    {
+      accessToken: options.metering.accessToken,
+      studentUuid: options.metering.studentId,
+      ...(input.courseUuid ? { courseUuid: input.courseUuid } : {}),
+    },
   );
 
   log.info(`Classroom persisted: ${persisted.id}, URL: ${persisted.url}`);
+
+  if (options.metering) {
+    try {
+      await tokenCounter.flushUsage(options.metering.studentId);
+    } catch (e) {
+      log.warn('Token usage flush failed (will retry on next LLM call):', e);
+    }
+  }
 
   await options.onProgress?.({
     step: 'completed',
@@ -433,5 +515,6 @@ export async function generateClassroom(
     scenes,
     scenesCount: scenes.length,
     createdAt: persisted.createdAt,
+    ...(notConfigured.length > 0 ? { notConfigured } : {}),
   };
 }

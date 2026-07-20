@@ -19,6 +19,10 @@ import type { ThinkingConfig } from '@/lib/types/provider';
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModel } from '@/lib/server/resolve-model';
+import { extractUser } from '@/lib/auth/jwt';
+import { parseModelString } from '@/lib/ai/providers';
+import type { LLMMetering } from '@/lib/ai/llm';
+import { tokenCounter } from '@/lib/server/token-counter';
 const log = createLogger('Chat API');
 
 // Allow streaming responses up to 60 seconds
@@ -42,13 +46,9 @@ export const maxDuration = 60;
  */
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
-  let chatModel: string | undefined;
-  let chatMessageCount: number | undefined;
 
   try {
     const body: StatelessChatRequest = await req.json();
-    chatModel = body.model;
-    chatMessageCount = body.messages?.length;
 
     // Validate required fields
     if (!body.messages || !Array.isArray(body.messages)) {
@@ -63,13 +63,49 @@ export async function POST(req: NextRequest) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: config.agentIds');
     }
 
-    const { model: languageModel, apiKey: resolvedApiKey } = resolveModel({
+    // Auth check
+    const accessToken = req.cookies.get('access_token')?.value;
+    if (!accessToken) {
+      return apiError('UNAUTHORIZED', 401, 'Authentication required');
+    }
+
+    const authUser = extractUser(accessToken);
+    if (!authUser) {
+      return apiError('UNAUTHORIZED', 401, 'Invalid token');
+    }
+
+    const {
+      model: languageModel,
+      apiKey: resolvedApiKey,
+      modelString: resolvedModelString,
+    } = resolveModel({
       modelString: body.model,
       apiKey: body.apiKey,
       baseUrl: body.baseUrl,
       providerType: body.providerType,
       requiresApiKey: body.requiresApiKey,
     });
+
+    // Build metering for students so the orchestrator's LLM calls flow through
+    // quota enforcement + usage recording. Admins/other roles skip metering.
+    let metering: LLMMetering | undefined;
+    if (authUser.role === 'student' && authUser.student_uuid) {
+      const { providerId } = parseModelString(resolvedModelString);
+      metering = {
+        studentId: authUser.student_uuid,
+        providerId,
+        accessToken,
+      };
+      // Prime the token-counter cache so recordUsage() doesn't silently no-op
+      // on the student's first chat call. Network errors here don't block the
+      // chat; the student just won't be metered until the next successful init.
+      try {
+        await tokenCounter.initQuota(authUser.student_uuid, accessToken);
+      } catch (e) {
+        log.warn('initQuota failed — chat will proceed without metering for this request', e);
+        metering = undefined;
+      }
+    }
 
     if (!resolvedApiKey && body.requiresApiKey !== false) {
       return apiError('MISSING_API_KEY', 401, 'API Key is required');
@@ -121,16 +157,29 @@ export async function POST(req: NextRequest) {
           signal,
           languageModel,
           { enabled: false } satisfies ThinkingConfig,
+          metering,
         );
 
-        for await (const event of generator) {
-          if (signal.aborted) {
-            log.info('Request was aborted');
-            break;
-          }
+        try {
+          for await (const event of generator) {
+            if (signal.aborted) {
+              log.info('Request was aborted');
+              break;
+            }
 
-          const data = `data: ${JSON.stringify(event)}\n\n`;
-          await writer.write(encoder.encode(data));
+            const data = `data: ${JSON.stringify(event)}\n\n`;
+            await writer.write(encoder.encode(data));
+          }
+        } finally {
+          // Ensure trailing usage is flushed even on short sessions (the 10-call
+          // periodic flush would otherwise leave 1–2-message sessions unreported).
+          if (metering) {
+            try {
+              await tokenCounter.flushUsage(metering.studentId);
+            } catch (e) {
+              log.warn('Token usage flush failed (will retry on next LLM call):', e);
+            }
+          }
         }
 
         stopHeartbeat();
@@ -149,10 +198,7 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        log.error(
-          `Chat stream error [model=${body.model ?? 'unknown'}, agents=${body.config?.agentIds?.length ?? 0}, messages=${body.messages?.length ?? 0}]:`,
-          error,
-        );
+        log.error('Stream error:', error);
 
         // Try to send error event
         try {
@@ -178,10 +224,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    log.error(
-      `Chat request failed [model=${chatModel ?? 'unknown'}, messages=${chatMessageCount ?? 0}]:`,
-      error,
-    );
+    log.error('Error:', error);
     return apiError(
       'INTERNAL_ERROR',
       500,

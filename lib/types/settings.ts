@@ -2,6 +2,7 @@ import type { ProviderId, ModelInfo, ProviderType } from '@/lib/types/provider';
 
 export type SettingsSection =
   | 'general'
+  | 'features'
   | 'providers'
   | 'agents'
   | 'tts'

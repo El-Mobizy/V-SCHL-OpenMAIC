@@ -1,27 +1,36 @@
 import { type NextRequest } from 'next/server';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import {
+  apiError,
+  apiErrorResponseFromApiError,
+  apiSuccess,
+} from '@/lib/server/api-response';
 import {
   isValidClassroomJobId,
   readClassroomGenerationJob,
 } from '@/lib/server/classroom-job-store';
 import { buildRequestOrigin } from '@/lib/server/classroom-storage';
-import { createLogger } from '@/lib/logger';
-
-const log = createLogger('ClassroomJob API');
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { ApiError } from '@/lib/api/errors';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, context: { params: Promise<{ jobId: string }> }) {
-  let resolvedJobId: string | undefined;
+  let studentAuth: { studentId: string; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
+    throw e;
+  }
+
   try {
     const { jobId } = await context.params;
-    resolvedJobId = jobId;
 
     if (!isValidClassroomJobId(jobId)) {
       return apiError('INVALID_REQUEST', 400, 'Invalid classroom generation job id');
     }
 
-    const job = await readClassroomGenerationJob(jobId);
+    const job = await readClassroomGenerationJob(jobId, studentAuth.accessToken);
     if (!job) {
       return apiError('INVALID_REQUEST', 404, 'Classroom generation job not found');
     }
@@ -43,7 +52,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ jobId: 
       done: job.status === 'succeeded' || job.status === 'failed',
     });
   } catch (error) {
-    log.error(`Classroom job retrieval failed [jobId=${resolvedJobId ?? 'unknown'}]:`, error);
     return apiError(
       'INTERNAL_ERROR',
       500,

@@ -9,8 +9,11 @@ import { NextRequest } from 'next/server';
 import { nanoid } from 'nanoid';
 import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 
 const log = createLogger('Agent Profiles API');
 
@@ -50,8 +53,14 @@ function stripCodeFences(text: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  let stageName: string | undefined;
-  let modelString: string | undefined;
+  let studentAuth: { studentId: string; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
+    throw e;
+  }
+
   try {
     const body = (await req.json()) as RequestBody;
     const {
@@ -62,7 +71,6 @@ export async function POST(req: NextRequest) {
       avatarDescriptions,
       availableVoices,
     } = body;
-    stageName = stageInfo?.name;
 
     // ── Validate required fields ──
     if (!stageInfo?.name) {
@@ -80,8 +88,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Model resolution from request headers ──
-    const { model: languageModel, modelString: _modelString } = resolveModelFromHeaders(req);
-    modelString = _modelString;
+    const { model: languageModel, modelString } = resolveModelFromHeaders(req);
+    const { providerId } = parseModelString(modelString);
 
     // ── Build prompt ──
     const sceneSummary = sceneOutlines?.length
@@ -155,6 +163,13 @@ Return a JSON object with this exact structure:
         prompt: userPrompt,
       },
       'agent-profiles',
+      undefined,
+      undefined,
+      {
+        studentId: studentAuth.studentId,
+        providerId,
+        accessToken: studentAuth.accessToken,
+      },
     );
 
     // ── Parse LLM response ──
@@ -226,10 +241,8 @@ Return a JSON object with this exact structure:
 
     return apiSuccess({ agents });
   } catch (error) {
-    log.error(
-      `Agent profiles generation failed [stage="${stageName ?? 'unknown'}", model=${modelString ?? 'unknown'}]:`,
-      error,
-    );
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
+    log.error('Agent profiles generation error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }
 }

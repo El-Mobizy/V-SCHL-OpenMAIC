@@ -17,16 +17,24 @@ import { IMAGE_PROVIDERS } from '@/lib/media/image-providers';
 import { VIDEO_PROVIDERS } from '@/lib/media/video-providers';
 import { isMediaPlaceholder } from '@/lib/store/media-generation';
 import {
-  getServerImageProviders,
-  getServerVideoProviders,
-  getServerTTSProviders,
-  resolveImageApiKey,
-  resolveImageBaseUrl,
-  resolveVideoApiKey,
-  resolveVideoBaseUrl,
-  resolveTTSApiKey,
-  resolveTTSBaseUrl,
+  getServerImageProvidersAsync,
+  getServerVideoProvidersAsync,
+  getServerTTSProvidersAsync,
+  resolveImageApiKeyAsync,
+  resolveImageBaseUrlAsync,
+  resolveVideoApiKeyAsync,
+  resolveVideoBaseUrlAsync,
+  resolveTTSApiKeyAsync,
+  resolveTTSBaseUrlAsync,
 } from '@/lib/server/provider-config';
+import { tokenCounter } from '@/lib/server/token-counter';
+import {
+  TTS_TOKENS_PER_CHAR,
+  IMAGE_TOKENS_PER_GENERATION,
+  VIDEO_TOKENS_PER_SECOND,
+  VIDEO_FALLBACK_SECONDS,
+  type Feature,
+} from '@/lib/server/feature-metering';
 import type { SceneOutline } from '@/lib/types/generation';
 import type { Scene } from '@/lib/types/stage';
 import type { SpeechAction } from '@/lib/types/action';
@@ -34,6 +42,22 @@ import type { ImageProviderId } from '@/lib/media/types';
 import type { VideoProviderId } from '@/lib/media/types';
 import type { TTSProviderId } from '@/lib/audio/types';
 import { splitLongSpeechActions } from '@/lib/audio/tts-utils';
+
+export interface MediaGenerationReport {
+  mediaMap: Record<string, string>;
+  notConfigured: Feature[];
+  generated: { images: number; videos: number };
+}
+
+export interface TTSGenerationReport {
+  notConfigured: boolean;
+  actionsSynthesized: number;
+  charactersSynthesized: number;
+}
+
+interface MeteringOpts {
+  studentId?: string;
+}
 
 const log = createLogger('ClassroomMedia');
 
@@ -70,30 +94,40 @@ export async function generateMediaForClassroom(
   outlines: SceneOutline[],
   classroomId: string,
   baseUrl: string,
-): Promise<Record<string, string>> {
+  metering: MeteringOpts = {},
+): Promise<MediaGenerationReport> {
   const mediaDir = path.join(CLASSROOMS_DIR, classroomId, 'media');
   await ensureDir(mediaDir);
 
   // Collect all media generation requests from outlines
   const requests = outlines.flatMap((o) => o.mediaGenerations ?? []);
-  if (requests.length === 0) return {};
+  const report: MediaGenerationReport = {
+    mediaMap: {},
+    notConfigured: [],
+    generated: { images: 0, videos: 0 },
+  };
+  if (requests.length === 0) return report;
 
-  // Resolve providers
-  const imageProviderIds = Object.keys(getServerImageProviders());
-  const videoProviderIds = Object.keys(getServerVideoProviders());
+  // Resolve providers (Symfony-aware: consults admin-configured keys)
+  const imageProviderIds = Object.keys(await getServerImageProvidersAsync());
+  const videoProviderIds = Object.keys(await getServerVideoProvidersAsync());
 
-  const mediaMap: Record<string, string> = {};
+  const imageRequests = requests.filter((r) => r.type === 'image');
+  const videoRequests = requests.filter((r) => r.type === 'video');
 
-  // Separate image and video requests, generate each type sequentially
-  // but run the two types in parallel (providers often have limited concurrency).
-  const imageRequests = requests.filter((r) => r.type === 'image' && imageProviderIds.length > 0);
-  const videoRequests = requests.filter((r) => r.type === 'video' && videoProviderIds.length > 0);
+  if (imageRequests.length > 0 && imageProviderIds.length === 0) {
+    report.notConfigured.push('image');
+  }
+  if (videoRequests.length > 0 && videoProviderIds.length === 0) {
+    report.notConfigured.push('video');
+  }
 
   const generateImages = async () => {
+    if (imageProviderIds.length === 0) return;
     for (const req of imageRequests) {
       try {
         const providerId = imageProviderIds[0] as ImageProviderId;
-        const apiKey = resolveImageApiKey(providerId);
+        const apiKey = await resolveImageApiKeyAsync(providerId);
         if (!apiKey) {
           log.warn(`No API key for image provider "${providerId}", skipping ${req.elementId}`);
           continue;
@@ -102,7 +136,12 @@ export async function generateMediaForClassroom(
         const model = providerConfig?.models?.[0]?.id;
 
         const result = await generateImage(
-          { providerId, apiKey, baseUrl: resolveImageBaseUrl(providerId), model },
+          {
+            providerId,
+            apiKey,
+            baseUrl: await resolveImageBaseUrlAsync(providerId),
+            model,
+          },
           { prompt: req.prompt, aspectRatio: req.aspectRatio || '16:9' },
         );
 
@@ -122,7 +161,21 @@ export async function generateMediaForClassroom(
 
         const filename = `${req.elementId}.${ext}`;
         await fs.writeFile(path.join(mediaDir, filename), buf);
-        mediaMap[req.elementId] = mediaServingUrl(baseUrl, classroomId, `media/${filename}`);
+        report.mediaMap[req.elementId] = mediaServingUrl(
+          baseUrl,
+          classroomId,
+          `media/${filename}`,
+        );
+        report.generated.images += 1;
+        if (metering.studentId) {
+          tokenCounter.recordUsage(
+            metering.studentId,
+            providerId,
+            model || '',
+            IMAGE_TOKENS_PER_GENERATION,
+            0,
+          );
+        }
         log.info(`Generated image: ${filename}`);
       } catch (err) {
         log.warn(`Image generation failed for ${req.elementId}:`, err);
@@ -131,10 +184,11 @@ export async function generateMediaForClassroom(
   };
 
   const generateVideos = async () => {
+    if (videoProviderIds.length === 0) return;
     for (const req of videoRequests) {
       try {
         const providerId = videoProviderIds[0] as VideoProviderId;
-        const apiKey = resolveVideoApiKey(providerId);
+        const apiKey = await resolveVideoApiKeyAsync(providerId);
         if (!apiKey) {
           log.warn(`No API key for video provider "${providerId}", skipping ${req.elementId}`);
           continue;
@@ -148,14 +202,35 @@ export async function generateMediaForClassroom(
         });
 
         const result = await generateVideo(
-          { providerId, apiKey, baseUrl: resolveVideoBaseUrl(providerId), model },
+          {
+            providerId,
+            apiKey,
+            baseUrl: await resolveVideoBaseUrlAsync(providerId),
+            model,
+          },
           normalized,
         );
 
         const buf = await downloadToBuffer(result.url);
         const filename = `${req.elementId}.mp4`;
         await fs.writeFile(path.join(mediaDir, filename), buf);
-        mediaMap[req.elementId] = mediaServingUrl(baseUrl, classroomId, `media/${filename}`);
+        report.mediaMap[req.elementId] = mediaServingUrl(
+          baseUrl,
+          classroomId,
+          `media/${filename}`,
+        );
+        report.generated.videos += 1;
+        if (metering.studentId) {
+          const seconds =
+            (normalized as { duration?: number }).duration || VIDEO_FALLBACK_SECONDS;
+          tokenCounter.recordUsage(
+            metering.studentId,
+            providerId,
+            model || '',
+            Math.round(seconds * VIDEO_TOKENS_PER_SECOND),
+            0,
+          );
+        }
         log.info(`Generated video: ${filename}`);
       } catch (err) {
         log.warn(`Video generation failed for ${req.elementId}:`, err);
@@ -165,7 +240,7 @@ export async function generateMediaForClassroom(
 
   await Promise.all([generateImages(), generateVideos()]);
 
-  return mediaMap;
+  return report;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,26 +280,35 @@ export async function generateTTSForClassroom(
   scenes: Scene[],
   classroomId: string,
   baseUrl: string,
-): Promise<void> {
+  metering: MeteringOpts = {},
+): Promise<TTSGenerationReport> {
+  const report: TTSGenerationReport = {
+    notConfigured: false,
+    actionsSynthesized: 0,
+    charactersSynthesized: 0,
+  };
   const audioDir = path.join(CLASSROOMS_DIR, classroomId, 'audio');
   await ensureDir(audioDir);
 
-  // Resolve TTS provider (exclude browser-native-tts)
-  const ttsProviderIds = Object.keys(getServerTTSProviders()).filter(
+  // Resolve TTS provider (Symfony-aware, exclude browser-native-tts)
+  const ttsProviderIds = Object.keys(await getServerTTSProvidersAsync()).filter(
     (id) => id !== 'browser-native-tts',
   );
   if (ttsProviderIds.length === 0) {
     log.warn('No server TTS provider configured, skipping TTS generation');
-    return;
+    report.notConfigured = true;
+    return report;
   }
 
   const providerId = ttsProviderIds[0] as TTSProviderId;
-  const apiKey = resolveTTSApiKey(providerId);
+  const apiKey = await resolveTTSApiKeyAsync(providerId);
   if (!apiKey) {
     log.warn(`No API key for TTS provider "${providerId}", skipping TTS generation`);
-    return;
+    report.notConfigured = true;
+    return report;
   }
-  const ttsBaseUrl = resolveTTSBaseUrl(providerId) || TTS_PROVIDERS[providerId]?.defaultBaseUrl;
+  const ttsBaseUrl =
+    (await resolveTTSBaseUrlAsync(providerId)) || TTS_PROVIDERS[providerId]?.defaultBaseUrl;
   const voice = DEFAULT_TTS_VOICES[providerId] || 'default';
   const format = TTS_PROVIDERS[providerId]?.supportedFormats?.[0] || 'mp3';
 
@@ -258,10 +342,22 @@ export async function generateTTSForClassroom(
 
         speechAction.audioId = audioId;
         speechAction.audioUrl = mediaServingUrl(baseUrl, classroomId, `audio/${filename}`);
+        report.actionsSynthesized += 1;
+        report.charactersSynthesized += speechAction.text.length;
+        if (metering.studentId) {
+          tokenCounter.recordUsage(
+            metering.studentId,
+            providerId,
+            DEFAULT_TTS_MODELS[providerId] || '',
+            speechAction.text.length * TTS_TOKENS_PER_CHAR,
+            0,
+          );
+        }
         log.info(`Generated TTS: ${filename} (${result.audio.length} bytes)`);
       } catch (err) {
         log.warn(`TTS generation failed for action ${action.id}:`, err);
       }
     }
   }
+  return report;
 }

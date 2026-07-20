@@ -16,16 +16,25 @@ import {
 import type { AgentInfo } from '@/lib/generation/generation-pipeline';
 import type { SceneOutline, PdfImage, ImageMapping } from '@/lib/types/generation';
 import { createLogger } from '@/lib/logger';
-import { apiError, apiSuccess } from '@/lib/server/api-response';
+import { apiError, apiErrorResponseFromApiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromHeaders } from '@/lib/server/resolve-model';
+import { requireStudentAuth } from '@/lib/server/request-auth';
+import { parseModelString } from '@/lib/ai/providers';
+import { ApiError } from '@/lib/api/errors';
 
 const log = createLogger('Scene Content API');
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  let outlineTitle: string | undefined;
-  let resolvedModelString: string | undefined;
+  let studentAuth: { studentId: string; accessToken: string };
+  try {
+    studentAuth = requireStudentAuth(req);
+  } catch (e) {
+    if (e instanceof ApiError) return apiErrorResponseFromApiError(e);
+    throw e;
+  }
+
   try {
     const body = await req.json();
     const {
@@ -74,8 +83,12 @@ export async function POST(req: NextRequest) {
 
     // ── Model resolution from request headers ──
     const { model: languageModel, modelInfo, modelString } = resolveModelFromHeaders(req);
-    outlineTitle = rawOutline?.title;
-    resolvedModelString = modelString;
+    const { providerId } = parseModelString(modelString);
+    const metering = {
+      studentId: studentAuth.studentId,
+      providerId,
+      accessToken: studentAuth.accessToken,
+    };
 
     // Detect vision capability
     const hasVision = !!modelInfo?.capabilities?.vision;
@@ -100,6 +113,9 @@ export async function POST(req: NextRequest) {
             maxOutputTokens: modelInfo?.outputWindow,
           },
           'scene-content',
+          undefined,
+          undefined,
+          metering,
         );
         return result.text;
       }
@@ -111,6 +127,9 @@ export async function POST(req: NextRequest) {
           maxOutputTokens: modelInfo?.outputWindow,
         },
         'scene-content',
+        undefined,
+        undefined,
+        metering,
       );
       return result.text;
     };
@@ -165,10 +184,8 @@ export async function POST(req: NextRequest) {
 
     return apiSuccess({ content, effectiveOutline });
   } catch (error) {
-    log.error(
-      `Scene content generation failed [scene="${outlineTitle ?? 'unknown'}", model=${resolvedModelString ?? 'unknown'}]:`,
-      error,
-    );
+    if (error instanceof ApiError) return apiErrorResponseFromApiError(error);
+    log.error('Scene content generation error:', error);
     return apiError('INTERNAL_ERROR', 500, error instanceof Error ? error.message : String(error));
   }
 }

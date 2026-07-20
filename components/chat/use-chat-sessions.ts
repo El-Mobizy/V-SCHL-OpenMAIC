@@ -20,6 +20,7 @@ import { useI18n } from '@/lib/hooks/use-i18n';
 import { getCurrentModelConfig } from '@/lib/utils/model-config';
 import { USER_AVATAR } from '@/lib/types/roundtable';
 import { processSSEStream } from './process-sse-stream';
+import { useTokenQuotaStore } from '@/lib/store/token-quota';
 import { StreamBuffer } from '@/lib/buffer/stream-buffer';
 import type { AgentStartItem, ActionItem } from '@/lib/buffer/stream-buffer';
 import { ActionEngine } from '@/lib/action/engine';
@@ -481,6 +482,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
       let currentMessages = requestTemplate.messages;
       let consecutiveEmptyTurns = 0;
 
+      try {
       while (turnCount < maxTurns) {
         if (controller.signal.aborted) break;
 
@@ -597,6 +599,11 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
         if (turnCount >= maxTurns && doneData && doneData.totalAgents > 0) {
           log.info(`[AgentLoop] Max turns (${maxTurns}) reached for session ${sessionId}`);
         }
+      }
+      } finally {
+        // Pull fresh quota once the agent loop has settled (completion, abort, or error).
+        // The server flushes usage on stream end, so this picks up the delta for the orb.
+        useTokenQuotaStore.getState().refresh();
       }
     },
     [createBufferForSession],

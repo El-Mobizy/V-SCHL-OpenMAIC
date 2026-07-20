@@ -21,6 +21,7 @@
 import type { LanguageModel } from 'ai';
 import type { StatelessChatRequest, StatelessEvent, ParsedAction } from '@/lib/types/chat';
 import type { ThinkingConfig } from '@/lib/types/provider';
+import type { LLMMetering } from '@/lib/ai/llm';
 import type { WhiteboardActionRecord } from './director-prompt';
 import { createOrchestrationGraph, buildInitialState } from './director-graph';
 import { parse as parsePartialJson, Allow } from 'partial-json';
@@ -319,6 +320,7 @@ export async function* statelessGenerate(
   abortSignal: AbortSignal,
   languageModel: LanguageModel,
   thinkingConfig?: ThinkingConfig,
+  metering?: LLMMetering,
 ): AsyncGenerator<StatelessEvent> {
   log.info(
     `[StatelessGenerate] Starting orchestration for agents: ${request.config.agentIds.join(', ')}`,
@@ -329,7 +331,7 @@ export async function* statelessGenerate(
 
   try {
     const graph = createOrchestrationGraph();
-    const initialState = buildInitialState(request, languageModel, thinkingConfig);
+    const initialState = buildInitialState(request, languageModel, thinkingConfig, metering);
 
     const stream = await graph.stream(initialState, {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
